@@ -1,0 +1,33 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+//Prisma schema mein moduleFormat = "cjs" ka matlab yeh hai ke jab Prisma aapke liye JavaScript client code banaye, toh woh CommonJS (CJS) style (require aur module.exports) use kare, na ke naya import/export (ESM) style.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+  moduleFormat ="cjs"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+
+model User {
+  id          Int      @id @default(autoincrement())
+  fullName    String
+  mobileNumber String  @unique
+  cnicNumber  String   @unique
+  password    String
+  handedness  String?   // or an enum: LEFT / RIGHT / AMBIDEXTROUS
+  skillLevel  String?   // or enum: BEGINNER / INTERMEDIATE / ADVANCED
+  location    String?
+  rank        Int      @default(0)
+  points      Int      @default(0)
+  wins        Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

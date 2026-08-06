@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+:root {
+  /* Change this once to update the font across the whole app */
+  --font-family: "Montserrat", sans-serif;
+
+  --color-background: #0e1821;
+  --color-surface: #152230;
+  --color-text: #ffffff;
+  --color-muted: #9aa5b1;
+  --color-primary: #e0f200;
+}
+
+@theme {
+  --font-sans: var(--font-family);
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-family);
+}
