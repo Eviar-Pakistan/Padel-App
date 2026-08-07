@@ -1,0 +1,252 @@
+import { useEffect, useState } from "react";
+import {
+  createProduct,
+  deleteProduct,
+  getMyProducts,
+  updateProduct,
+} from "../../api/owner";
+
+const emptyForm = {
+  name: "",
+  description: "",
+  price: "",
+  stock: "",
+  category: "",
+  image: "",
+  status: "ACTIVE",
+};
+
+export default function OwnerProductsPanel() {
+  const [products, setProducts] = useState([]);
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const { data } = await getMyProducts();
+      setProducts(data || []);
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Failed to load products.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const resetForm = () => {
+    setForm(emptyForm);
+    setEditingId(null);
+  };
+
+  const startEdit = (product) => {
+    setEditingId(product.id);
+    setForm({
+      name: product.name || "",
+      description: product.description || "",
+      price: String(product.price ?? ""),
+      stock: String(product.stock ?? ""),
+      category: product.category || "",
+      image: product.image || "",
+      status: product.status || "ACTIVE",
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const payload = {
+        name: form.name.trim(),
+        price: Number(form.price),
+        stock: Number(form.stock),
+        status: form.status,
+      };
+      if (form.description.trim()) payload.description = form.description.trim();
+      if (form.category.trim()) payload.category = form.category.trim();
+      if (form.image.trim()) payload.image = form.image.trim();
+
+      if (editingId) {
+        await updateProduct(editingId, payload);
+        setMessage("Product updated.");
+      } else {
+        await createProduct(payload);
+        setMessage("Product created.");
+      }
+      resetForm();
+      await load();
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Save failed.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this product?")) return;
+    try {
+      await deleteProduct(id);
+      if (editingId === id) resetForm();
+      await load();
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Delete failed.");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold text-white md:text-2xl">Products</h2>
+        <p className="mt-1 text-sm text-[var(--color-muted)]">
+          Manage your shop inventory
+        </p>
+      </div>
+
+      <form
+        onSubmit={handleSubmit}
+        className="grid gap-3 rounded-2xl border border-white/10 bg-[var(--color-surface)] p-4 md:grid-cols-2 md:p-5"
+      >
+        <p className="text-sm font-semibold text-white md:col-span-2">
+          {editingId ? "Edit product" : "Create product"}
+        </p>
+        <input
+          className="w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-3 text-sm text-white outline-none"
+          placeholder="Product name"
+          value={form.name}
+          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          required
+        />
+        <input
+          className="w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-3 text-sm text-white outline-none"
+          placeholder="Category"
+          value={form.category}
+          onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+        />
+        <input
+          type="number"
+          min="0"
+          className="w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-3 text-sm text-white outline-none"
+          placeholder="Price (PKR)"
+          value={form.price}
+          onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+          required
+        />
+        <input
+          type="number"
+          min="0"
+          className="w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-3 text-sm text-white outline-none"
+          placeholder="Stock"
+          value={form.stock}
+          onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
+          required
+        />
+        <input
+          className="w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-3 text-sm text-white outline-none md:col-span-2"
+          placeholder="Image URL (optional)"
+          value={form.image}
+          onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
+        />
+        <textarea
+          className="min-h-24 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-3 text-sm text-white outline-none md:col-span-2"
+          placeholder="Description"
+          value={form.description}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, description: e.target.value }))
+          }
+        />
+        <select
+          className="w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-3 text-sm text-white outline-none"
+          value={form.status}
+          onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+        >
+          <option value="ACTIVE">ACTIVE</option>
+          <option value="INACTIVE">INACTIVE</option>
+          <option value="OUT_OF_STOCK">OUT_OF_STOCK</option>
+        </select>
+        {error && <p className="text-sm text-red-400 md:col-span-2">{error}</p>}
+        {message && (
+          <p className="text-sm text-emerald-400 md:col-span-2">{message}</p>
+        )}
+        <div className="flex flex-wrap gap-2 md:col-span-2">
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-sm font-bold text-[var(--color-background)] disabled:opacity-60"
+          >
+            {saving
+              ? "Saving..."
+              : editingId
+                ? "Update product"
+                : "Create product"}
+          </button>
+          {editingId && (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="rounded-full border border-white/15 px-5 py-2.5 text-sm text-white"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      </form>
+
+      {loading ? (
+        <p className="text-sm text-[var(--color-muted)]">Loading products...</p>
+      ) : products.length === 0 ? (
+        <p className="text-sm text-[var(--color-muted)]">No products yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {products.map((product) => (
+            <div
+              key={product.id}
+              className="rounded-2xl border border-white/10 bg-[var(--color-surface)] p-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-white">{product.name}</p>
+                  <p className="mt-1 text-sm text-[var(--color-muted)]">
+                    PKR {String(product.price)} · Stock {product.stock} ·{" "}
+                    {product.status}
+                  </p>
+                  {product.category && (
+                    <p className="mt-1 text-xs text-white/70">{product.category}</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startEdit(product)}
+                    className="rounded-lg bg-white/10 px-3 py-2 text-xs font-medium text-white"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(product.id)}
+                    className="rounded-lg bg-red-500/15 px-3 py-2 text-xs font-medium text-red-300"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

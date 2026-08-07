@@ -2,6 +2,7 @@ import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { Roles } from './roles';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
@@ -58,6 +59,7 @@ export class AuthService {
     const access_token = await this.jwtService.signAsync({
       sub: userId,
       mobile,
+      role: Roles.USER,
     });
     return { access_token };
   }
