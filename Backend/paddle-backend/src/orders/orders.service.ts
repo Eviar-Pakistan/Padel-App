@@ -119,7 +119,13 @@ export class OrdersService {
       orderBy: { createdAt: 'desc' },
       include: {
         items: {
-          include: { product: true },
+          include: {
+            product: {
+              include: {
+                images: { orderBy: { sortOrder: 'asc' }, take: 1 },
+              },
+            },
+          },
         },
         paddleOwner: {
           select: {
@@ -137,7 +143,13 @@ export class OrdersService {
       orderBy: { createdAt: 'desc' },
       include: {
         items: {
-          include: { product: true },
+          include: {
+            product: {
+              include: {
+                images: { orderBy: { sortOrder: 'asc' }, take: 1 },
+              },
+            },
+          },
         },
         user: {
           select: {
@@ -155,7 +167,13 @@ export class OrdersService {
       where: { id: orderId },
       include: {
         items: {
-          include: { product: true },
+          include: {
+            product: {
+              include: {
+                images: { orderBy: { sortOrder: 'asc' }, take: 1 },
+              },
+            },
+          },
         },
         user: {
           select: {
@@ -187,7 +205,13 @@ export class OrdersService {
       data: { status: dto.status },
       include: {
         items: {
-          include: { product: true },
+          include: {
+            product: {
+              include: {
+                images: { orderBy: { sortOrder: 'asc' }, take: 1 },
+              },
+            },
+          },
         },
         user: {
           select: {

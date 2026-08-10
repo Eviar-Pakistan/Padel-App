@@ -3,19 +3,18 @@ import { useNavigate } from "react-router-dom";
 import {
   FaArrowLeft,
   FaBookmark,
-  FaComment,
-  FaHeart,
-  FaMapMarkerAlt,
+  FaEllipsisH,
   FaPaperPlane,
   FaPlus,
   FaRegBookmark,
   FaRegHeart,
+  FaHeart,
   FaSearch,
-  FaShare,
-  FaEllipsisH,
-  FaTag,
   FaTimes,
+  FaMapMarkerAlt,
+  FaTag,
 } from "react-icons/fa";
+import { FiMessageCircle, FiShare2 } from "react-icons/fi";
 import TopNav from "../components/TopNav";
 import BottomNav from "../components/BottomNav";
 import NewsCategoryPicker from "../components/NewsCategoryPicker";
@@ -276,14 +275,14 @@ export default function NewsFeed() {
       <main className="mx-auto w-full max-w-md px-0 pb-28 pt-16">
         <div className="sticky top-16 z-40 border-b border-white/10 bg-[var(--color-background)] px-4 py-3">
           <div className="mb-3 flex items-center gap-2">
-            <button
+            {/* <button
               type="button"
               onClick={() => navigate("/")}
               className="rounded-lg p-2 text-white/80 hover:bg-white/5"
               aria-label="Back"
             >
               <FaArrowLeft className="h-4 w-4" />
-            </button>
+            </button> */}
             <h1 className="flex-1 text-lg font-bold text-white">News Feed</h1>
             <button
               type="button"
@@ -593,7 +592,6 @@ export default function NewsFeed() {
       </main>
 
       <BottomNav
-        active="home"
         onChange={(id) => {
           if (id === "home") navigate("/");
           else navigate(`/${id}`);
@@ -644,12 +642,29 @@ function PostCard({ post, onLike, onSave, onShare, onComment, onEdit, onDelete }
   const images = Array.isArray(post.images) ? post.images : [];
   const [slide, setSlide] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [descExpanded, setDescExpanded] = useState(false);
+
+  const description = post.description || "";
+  const descWords = description.trim().split(/\s+/).filter(Boolean);
+  const needsMore = descWords.length > 5;
+  const visibleDescription =
+    !needsMore || descExpanded
+      ? description
+      : `${descWords.slice(0, 5).join(" ")}...`;
 
   return (
     <article className="bg-[var(--color-background)]">
       <div className="flex items-center gap-3 px-4 py-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-primary)]/20 text-sm font-bold text-[var(--color-primary)]">
-          {(post.authorName || "?").charAt(0).toUpperCase()}
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)]/20 text-sm font-bold text-[var(--color-primary)]">
+          {mediaUrl(post.authorProfileImage) ? (
+            <img
+              src={mediaUrl(post.authorProfileImage)}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            (post.authorName || "?").charAt(0).toUpperCase()
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-white">{post.authorName}</p>
@@ -657,7 +672,7 @@ function PostCard({ post, onLike, onSave, onShare, onComment, onEdit, onDelete }
             {post.location} · {timeAgo(post.createdAt)}
           </p>
         </div>
-        <span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide text-white/50">
+        <span className="rounded-full   bg-[var(--color-primary)]/10 px-2  text-center font-mono text-[12px] uppercase tracking-wide text-[var(--color-primary)]">
           {String(post.category).replace(/_/g, " ")}
         </span>
         {post.isMine && (
@@ -735,36 +750,63 @@ function PostCard({ post, onLike, onSave, onShare, onComment, onEdit, onDelete }
         </div>
       )}
 
-      <div className="flex items-center gap-4 px-4 py-3">
-        <button type="button" onClick={onLike} className="text-white" aria-label="Like">
-          {post.likedByMe ? (
-            <FaHeart className="h-6 w-6 text-red-500" />
-          ) : (
-            <FaRegHeart className="h-6 w-6" />
-          )}
-        </button>
-        <button type="button" onClick={onComment} className="text-white" aria-label="Comment">
-          <FaComment className="h-6 w-6" />
-        </button>
-        <button type="button" onClick={onShare} className="text-white" aria-label="Share">
-          <FaShare className="h-5 w-5" />
-        </button>
-        <button type="button" onClick={onSave} className="ml-auto text-white" aria-label="Save">
-          {post.savedByMe ? (
-            <FaBookmark className="h-5 w-5 text-[var(--color-primary)]" />
-          ) : (
-            <FaRegBookmark className="h-5 w-5" />
-          )}
-        </button>
+      <div className="flex items-center justify-between gap-4 px-4 py-3">
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={onLike}
+            className="inline-flex items-center gap-1.5 text-white"
+            aria-label="Like"
+          >
+            {post.likedByMe ? (
+              <FaHeart className="h-6 w-6 text-[var(--color-primary)]" />
+            ) : (
+              <FaRegHeart className="h-6 w-6" />
+            )}
+            <span className="text-sm text-white/70">{post.likeCount || 0}</span>
+          </button>
+          <span className="h-4 w-px bg-white/15" aria-hidden />
+          <button
+            type="button"
+            onClick={onComment}
+            className="inline-flex items-center gap-1.5 text-white"
+            aria-label="Comment"
+          >
+            <FiMessageCircle className="h-6 w-6" strokeWidth={2} />
+            <span className="text-sm text-white/70">{post.commentCount || 0}</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <button type="button" onClick={onShare} className="text-white" aria-label="Share">
+            <FiShare2 className="h-6 w-6" strokeWidth={2} />
+          </button>
+          <button type="button" onClick={onSave} className="text-white" aria-label="Save">
+            {post.savedByMe ? (
+              <FaBookmark className="h-5 w-5 text-[var(--color-primary)]" />
+            ) : (
+              <FaRegBookmark className="h-5 w-5" />
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="space-y-1 px-4 pb-4">
-        <p className="text-sm font-semibold text-white">
-          {post.likeCount} like{post.likeCount === 1 ? "" : "s"}
-        </p>
         <p className="text-sm text-white/90">
           <span className="font-semibold">{post.authorName}</span>{" "}
-          {post.description}
+          {visibleDescription}
+          {needsMore && (
+            <>
+              {" "}
+              <button
+                type="button"
+                onClick={() => setDescExpanded((v) => !v)}
+                className="text-xs font-medium text-white/45 hover:text-white/70"
+              >
+                {descExpanded ? "view less" : "view more"}
+              </button>
+            </>
+          )}
         </p>
         {post.commentCount > 0 && (
           <button
@@ -1053,7 +1095,7 @@ function CommentsSheet({ postId, onClose, onCountChange }) {
       </div>
       <button type="button" onClick={() => toggleCommentLike(comment)} className="self-start pt-1">
         {comment.likedByMe ? (
-          <FaHeart className="h-3 w-3 text-red-500" />
+          <FaHeart className="h-3 w-3 text-[var(--color-primary)]" />
         ) : (
           <FaRegHeart className="h-3 w-3 text-white/40" />
         )}

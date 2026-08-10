@@ -318,7 +318,11 @@ export default function OwnerNewsPanel() {
                 className="overflow-hidden rounded-2xl border border-white/10 bg-[var(--color-surface)]"
               >
                 {cover ? (
-                  <img src={cover} alt="" className="h-40 w-full object-cover" />
+                 <img
+                 src={cover}
+                 alt={post.description}
+                 className="h-[400px] w-full bg-white object-contain"
+               />
                 ) : (
                   <div className="flex h-28 items-center justify-center bg-[#0e1821] text-xs text-white/30">
                     No image

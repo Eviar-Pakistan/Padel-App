@@ -9,13 +9,19 @@ export class ImageUploadService {
   private readonly uploadRoot = join(process.cwd(), 'uploads');
   private readonly courtsDir = join(this.uploadRoot, 'courts');
   private readonly newsDir = join(this.uploadRoot, 'news');
+  private readonly productsDir = join(this.uploadRoot, 'products');
+  private readonly profilesDir = join(this.uploadRoot, 'profiles');
 
   constructor() {
-    if (!existsSync(this.courtsDir)) {
-      mkdirSync(this.courtsDir, { recursive: true });
-    }
-    if (!existsSync(this.newsDir)) {
-      mkdirSync(this.newsDir, { recursive: true });
+    for (const dir of [
+      this.courtsDir,
+      this.newsDir,
+      this.productsDir,
+      this.profilesDir,
+    ]) {
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
     }
   }
 
@@ -30,6 +36,15 @@ export class ImageUploadService {
 
   async saveNewsImages(files: Express.Multer.File[] = []): Promise<string[]> {
     return this.saveImages(files, this.newsDir, 'news');
+  }
+
+  async saveProductImages(files: Express.Multer.File[] = []): Promise<string[]> {
+    return this.saveImages(files, this.productsDir, 'products');
+  }
+
+  async saveProfileImage(file?: Express.Multer.File): Promise<string | undefined> {
+    const urls = await this.saveImages(file ? [file] : [], this.profilesDir, 'profiles');
+    return urls[0];
   }
 
   private async saveImages(

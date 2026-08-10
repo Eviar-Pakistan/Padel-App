@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   FaBars,
   FaTimes,
@@ -30,10 +30,23 @@ const navItems = [
   { id: "orders", label: "Orders", icon: FaShoppingCart },
 ];
 
+const validTabs = new Set(navItems.map((item) => item.id));
+
 export default function OwnerDashboard() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("overview");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get("tab");
+  const editProductId = searchParams.get("edit");
+  const [activeTab, setActiveTab] = useState(
+    validTabs.has(tabFromUrl) ? tabFromUrl : "overview"
+  );
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (validTabs.has(tabFromUrl) && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl, activeTab]);
 
   const handleLogout = () => {
     localStorage.removeItem("ownerAccessToken");
@@ -43,6 +56,7 @@ export default function OwnerDashboard() {
   const selectTab = (id) => {
     setActiveTab(id);
     setSidebarOpen(false);
+    setSearchParams(id === "overview" ? {} : { tab: id });
   };
 
   const sidebar = (
@@ -146,7 +160,9 @@ export default function OwnerDashboard() {
           {activeTab === "bookings" && <OwnerBookingsPanel />}
           {activeTab === "news" && <OwnerNewsPanel />}
           {activeTab === "coaches" && <OwnerCoachesPanel />}
-          {activeTab === "products" && <OwnerProductsPanel />}
+          {activeTab === "products" && (
+            <OwnerProductsPanel initialEditId={editProductId} />
+          )}
           {activeTab === "orders" && <OwnerOrdersPanel />}
         </main>
       </div>

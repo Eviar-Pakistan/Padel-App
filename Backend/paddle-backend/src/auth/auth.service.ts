@@ -33,6 +33,7 @@ export class AuthService {
         mobileNumber: dto.mobileNumber,
         cnicNumber: dto.cnicNumber,
         password: hash,
+        skillLevel: 'BEGINNER',
       },
     });
 

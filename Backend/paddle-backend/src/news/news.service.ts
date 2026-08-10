@@ -493,11 +493,28 @@ export class NewsService {
     if (!posts.length) return [];
 
     const ids = posts.map((p) => p.id);
+    const authorUserIds = [
+      ...new Set(
+        posts
+          .filter((p) => p.authorType === NewsAuthorType.USER && p.userId)
+          .map((p) => p.userId as number),
+      ),
+    ];
+
     let liked = new Set<string>();
     let saved = new Set<string>();
+    const avatarByUserId = new Map<number, string | null>();
+
+    const avatarPromise =
+      authorUserIds.length > 0
+        ? this.prisma.user.findMany({
+            where: { id: { in: authorUserIds } },
+            select: { id: true, profileImage: true },
+          })
+        : Promise.resolve([]);
 
     if (viewer?.role === Roles.USER) {
-      const [likes, saves] = await Promise.all([
+      const [likes, saves, authors] = await Promise.all([
         this.prisma.newsLike.findMany({
           where: { userId: viewer.userId, postId: { in: ids } },
           select: { postId: true },
@@ -506,9 +523,18 @@ export class NewsService {
           where: { userId: viewer.userId, postId: { in: ids } },
           select: { postId: true },
         }),
+        avatarPromise,
       ]);
       liked = new Set(likes.map((l) => l.postId));
       saved = new Set(saves.map((s) => s.postId));
+      for (const author of authors) {
+        avatarByUserId.set(author.id, author.profileImage);
+      }
+    } else {
+      const authors = await avatarPromise;
+      for (const author of authors) {
+        avatarByUserId.set(author.id, author.profileImage);
+      }
     }
 
     return posts.map((post) => {
@@ -520,9 +546,15 @@ export class NewsService {
           post.authorType === NewsAuthorType.PADDLE_OWNER &&
           post.paddleOwnerId === viewer.userId);
 
+      const authorProfileImage =
+        post.authorType === NewsAuthorType.USER && post.userId
+          ? avatarByUserId.get(post.userId) || null
+          : null;
+
       return {
         ...post,
         images: Array.isArray(post.images) ? post.images : [],
+        authorProfileImage,
         likedByMe: liked.has(post.id),
         savedByMe: saved.has(post.id),
         isMine: Boolean(isMine),

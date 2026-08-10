@@ -28,10 +28,30 @@ export const deleteCoach = (id) => ownerApi.delete(`coaches/${id}`);
 
 // Products
 export const getMyProducts = () => ownerApi.get("products/mine");
-export const createProduct = (data) => ownerApi.post("products", data);
-export const updateProduct = (id, data) =>
-  ownerApi.patch(`products/${id}`, data);
+export const getProduct = (id) => ownerApi.get(`products/${id}`);
+export const createProduct = (formData) =>
+  ownerApi.post("products", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+export const updateProduct = (id, formData) =>
+  ownerApi.patch(`products/${id}`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
 export const deleteProduct = (id) => ownerApi.delete(`products/${id}`);
+
+// Product categories
+export const getProductCategories = () => ownerApi.get("product-categories");
+export const createProductCategory = (data) =>
+  ownerApi.post("product-categories", data);
+export const deleteProductCategory = (id) =>
+  ownerApi.delete(`product-categories/${id}`);
+
+// Product brands
+export const getProductBrands = () => ownerApi.get("product-brands");
+export const createProductBrand = (data) =>
+  ownerApi.post("product-brands", data);
+export const deleteProductBrand = (id) =>
+  ownerApi.delete(`product-brands/${id}`);
 
 // Orders
 export const getStoreOrders = () => ownerApi.get("orders/store");

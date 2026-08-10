@@ -5,6 +5,19 @@ import {
   getCoaches,
   updateCoach,
 } from "../../api/owner";
+import CustomSelect from "../../components/CustomSelect";
+
+const GENDER_OPTIONS = [
+  { value: "MALE", label: "Male" },
+  { value: "FEMALE", label: "Female" },
+  { value: "OTHER", label: "Other" },
+];
+
+const COACH_STATUSES = [
+  { value: "ACTIVE", label: "ACTIVE" },
+  { value: "INACTIVE", label: "INACTIVE" },
+  { value: "SUSPENDED", label: "SUSPENDED" },
+];
 
 const emptyForm = {
   firstName: "",
@@ -176,16 +189,12 @@ export default function OwnerCoachesPanel() {
         {field("lastName", "Last name")}
         {field("email", "Email", "email")}
         {field("phoneNumber", "Phone number")}
-        <select
-          className="w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-3 text-sm text-white outline-none"
+        <CustomSelect
           value={form.gender}
-          onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}
-        >
-          <option value="">Gender (optional)</option>
-          <option value="MALE">Male</option>
-          <option value="FEMALE">Female</option>
-          <option value="OTHER">Other</option>
-        </select>
+          onChange={(v) => setForm((f) => ({ ...f, gender: v }))}
+          placeholder="Gender (optional)"
+          options={GENDER_OPTIONS}
+        />
         {field("yearsOfExperience", "Years of experience", "number")}
         {field("sessionRate", "Session rate", "number")}
         {field("certificationLevel", "Certification level")}
@@ -197,15 +206,13 @@ export default function OwnerCoachesPanel() {
           value={form.bio}
           onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
         />
-        <select
-          className="w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-3 text-sm text-white outline-none"
+        <CustomSelect
           value={form.status}
-          onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-        >
-          <option value="ACTIVE">ACTIVE</option>
-          <option value="INACTIVE">INACTIVE</option>
-          <option value="SUSPENDED">SUSPENDED</option>
-        </select>
+          onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+          placeholder="Status"
+          allowEmpty={false}
+          options={COACH_STATUSES}
+        />
         <label className="flex items-center gap-2 text-sm text-white/80">
           <input
             type="checkbox"

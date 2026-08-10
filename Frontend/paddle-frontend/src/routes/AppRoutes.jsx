@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { CartProvider } from "../context/CartContext";
 import Home from "../pages/Home";
 import Login from "../pages/Login";
 import Register from "../pages/Register";
@@ -9,51 +10,98 @@ import AdminLogin from "../pages/admin/AdminLogin";
 import AdminDashboard from "../pages/admin/AdminDashboard";
 import OwnerLogin from "../pages/owner/OwnerLogin";
 import OwnerDashboard from "../pages/owner/OwnerDashboard";
+import OwnerProductDetails from "../pages/owner/OwnerProductDetails";
 import NewsFeed from "../pages/NewsFeed";
+import Profile from "../pages/Profile";
+import Shop from "../pages/Shop";
+import ShopProductDetails from "../pages/ShopProductDetails";
+import Cart from "../pages/Cart";
 
 export default function AppRoutes() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/news"
-          element={
-            <ProtectedRoute>
-              <NewsFeed />
-            </ProtectedRoute>
-          }
-        />
+      <CartProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Home />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/news"
+            element={
+              <ProtectedRoute>
+                <NewsFeed />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/shop"
+            element={
+              <ProtectedRoute>
+                <Shop />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/shop/:id"
+            element={
+              <ProtectedRoute>
+                <ShopProductDetails />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/cart"
+            element={
+              <ProtectedRoute>
+                <Cart />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route path="/admin/login" element={<AdminLogin />} />
-        <Route
-          path="/admin/dashboard"
-          element={
-            <AdminProtectedRoute>
-              <AdminDashboard />
-            </AdminProtectedRoute>
-          }
-        />
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route
+            path="/admin/dashboard"
+            element={
+              <AdminProtectedRoute>
+                <AdminDashboard />
+              </AdminProtectedRoute>
+            }
+          />
 
-        <Route path="/owner/login" element={<OwnerLogin />} />
-        <Route
-          path="/owner/dashboard"
-          element={
-            <OwnerProtectedRoute>
-              <OwnerDashboard />
-            </OwnerProtectedRoute>
-          }
-        />
-      </Routes>
+          <Route path="/owner/login" element={<OwnerLogin />} />
+          <Route
+            path="/owner/dashboard"
+            element={
+              <OwnerProtectedRoute>
+                <OwnerDashboard />
+              </OwnerProtectedRoute>
+            }
+          />
+          <Route
+            path="/owner/products/:id"
+            element={
+              <OwnerProtectedRoute>
+                <OwnerProductDetails />
+              </OwnerProtectedRoute>
+            }
+          />
+        </Routes>
+      </CartProvider>
     </BrowserRouter>
   );
 }
