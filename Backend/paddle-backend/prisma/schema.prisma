@@ -34,6 +34,9 @@ model User {
   coachReviews  CoachReview[]
   orders        Order[]
   courtBookings CourtBooking[]
+  courtBookingParticipants CourtBookingParticipant[]
+  courtBookingJoinRequests CourtBookingJoinRequest[]
+  notificationsReceived Notification[] @relation("NotificationReceiver")
   newsPosts     NewsPost[]
   newsLikes     NewsLike[]
   newsSaves     NewsSave[]
@@ -239,18 +242,29 @@ enum BookingStatus {
   COMPLETED
 }
 
+enum CourtEnvironmentType {
+  INDOOR
+  OUTDOOR
+  SEMI_INDOOR
+  SEMI_OUTDOOR
+}
+
 model Court {
-  id            String          @id @default(uuid())
-  name          String
-  images        Json            @default("[]") // string[] of uploaded image URLs
-  pricePerHour  Decimal // PKR
-  isActive      Boolean         @default(true)
-  paddleOwnerId Int
-  paddleOwner   PaddleOwner     @relation(fields: [paddleOwnerId], references: [id], onDelete: Cascade)
-  timeSlots     CourtTimeSlot[]
-  bookings      CourtBooking[]
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id              String               @id @default(uuid())
+  name            String
+  images          Json                 @default("[]") // string[] of uploaded image URLs
+  pricePerHour    Decimal // PKR
+  environmentType CourtEnvironmentType @default(OUTDOOR)
+  address         String?
+  latitude        Float?
+  longitude       Float?
+  isActive        Boolean              @default(true)
+  paddleOwnerId   Int
+  paddleOwner     PaddleOwner          @relation(fields: [paddleOwnerId], references: [id], onDelete: Cascade)
+  timeSlots       CourtTimeSlot[]
+  bookings        CourtBooking[]
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 }
 
 /// Recurring daily availability templates, e.g. 06:00-07:00 every day
@@ -268,21 +282,62 @@ model CourtTimeSlot {
 }
 
 model CourtBooking {
-  id          String        @id @default(uuid())
-  courtId     String
-  timeSlotId  String
-  userId      Int
-  bookingDate DateTime // specific calendar day
-  status      BookingStatus @default(PENDING)
-  totalPrice  Decimal // snapshot of pricePerHour
-  notes       String?
-  court       Court         @relation(fields: [courtId], references: [id], onDelete: Cascade)
-  timeSlot    CourtTimeSlot @relation(fields: [timeSlotId], references: [id], onDelete: Cascade)
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id             String                     @id @default(uuid())
+  courtId        String
+  timeSlotId     String
+  userId         Int // booking owner
+  bookingDate    DateTime // specific calendar day
+  status         BookingStatus              @default(PENDING)
+  totalPrice     Decimal // snapshot of pricePerHour
+  notes          String?
+  isPublic       Boolean                    @default(false)
+  /// Remaining open player spots (out of 4). Owner occupies at least 1.
+  availableSlots Int                        @default(0)
+  court          Court                      @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  timeSlot       CourtTimeSlot              @relation(fields: [timeSlotId], references: [id], onDelete: Cascade)
+  user           User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  participants   CourtBookingParticipant[]
+  joinRequests   CourtBookingJoinRequest[]
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
 
   @@unique([timeSlotId, bookingDate])
+}
+
+/// Extra players who joined a public court booking (not the booking owner)
+model CourtBookingParticipant {
+  id        String       @id @default(uuid())
+  bookingId String
+  userId    Int
+  booking   CourtBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+
+  @@unique([bookingId, userId])
+  @@index([userId])
+}
+
+enum JoinRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+/// User B requests to join User A's public booking; owner must accept
+model CourtBookingJoinRequest {
+  id          String            @id @default(uuid())
+  bookingId   String
+  requesterId Int
+  status      JoinRequestStatus @default(PENDING)
+  booking     CourtBooking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  requester   User              @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([bookingId, requesterId])
+  @@index([requesterId])
+  @@index([status])
 }
 
 enum NewsCategory {
@@ -390,4 +445,28 @@ model NewsCommentLike {
 
   @@unique([commentId, userId])
   @@index([userId])
+}
+
+/// General-purpose notifications (type is a free-form string, not an enum).
+/// receiverId always refers to a User.
+/// senderId is a plain int (User id, PaddleOwner id, etc. depending on type).
+/// Current type examples: "Booking Details", "Shopping Details", "Court Slot Join", "Order Status"
+model Notification {
+  id         String   @id @default(uuid())
+  receiverId Int
+  senderId   Int
+  type       String
+  message    String
+  isRead     Boolean  @default(false)
+  /// Optional action payload, e.g. { "action": "ACCEPT_JOIN", "joinRequestId": "..." }
+  meta       Json?
+  receiver   User     @relation("NotificationReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([receiverId])
+  @@index([senderId])
+  @@index([type])
+  @@index([receiverId, createdAt])
+  @@index([receiverId, isRead])
 }

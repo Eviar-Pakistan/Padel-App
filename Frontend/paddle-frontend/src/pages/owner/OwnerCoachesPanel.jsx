@@ -231,7 +231,7 @@ export default function OwnerCoachesPanel() {
           <button
             type="submit"
             disabled={saving}
-            className="rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-sm font-bold text-[var(--color-background)] disabled:opacity-60"
+            className="rounded-full bg-[var(--color-secondary)] px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
           >
             {saving ? "Saving..." : editingId ? "Update coach" : "Create coach"}
           </button>

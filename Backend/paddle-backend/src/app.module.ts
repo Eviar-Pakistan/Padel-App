@@ -11,6 +11,7 @@ import { ProductsModule } from './products/products.module';
 import { OrdersModule } from './orders/orders.module';
 import { CourtsModule } from './courts/courts.module';
 import { NewsModule } from './news/news.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { NewsModule } from './news/news.module';
     OrdersModule,
     CourtsModule,
     NewsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

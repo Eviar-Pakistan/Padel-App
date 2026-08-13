@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { getStoreBookings, updateBookingStatus } from "../../api/owner";
+import { FaTrash } from "react-icons/fa";
+import {
+  deleteBooking,
+  getStoreBookings,
+  updateBookingStatus,
+} from "../../api/owner";
 
 const statuses = ["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED"];
 
@@ -7,6 +12,7 @@ export default function OwnerBookingsPanel() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [deletingId, setDeletingId] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -33,6 +39,21 @@ export default function OwnerBookingsPanel() {
     } catch (err) {
       const msg = err.response?.data?.message;
       setError(Array.isArray(msg) ? msg.join(", ") : msg || "Status update failed.");
+    }
+  };
+
+  const onDelete = async (id) => {
+    if (!window.confirm("Delete this booking permanently?")) return;
+    setDeletingId(id);
+    setError("");
+    try {
+      await deleteBooking(id);
+      await load();
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Delete failed.");
+    } finally {
+      setDeletingId("");
     }
   };
 
@@ -65,6 +86,7 @@ export default function OwnerBookingsPanel() {
                   <th className="px-4 py-3 font-medium">Date</th>
                   <th className="px-4 py-3 font-medium">Price</th>
                   <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -94,6 +116,18 @@ export default function OwnerBookingsPanel() {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        title="Delete booking"
+                        disabled={deletingId === b.id}
+                        onClick={() => onDelete(b.id)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                      >
+                        <FaTrash className="h-3 w-3" />
+                        {deletingId === b.id ? "Deleting..." : "Delete"}
+                      </button>
                     </td>
                   </tr>
                 ))}

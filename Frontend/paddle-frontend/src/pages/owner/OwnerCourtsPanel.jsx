@@ -5,6 +5,8 @@ import {
   getMyCourts,
   updateCourt,
 } from "../../api/owner";
+import CustomSelect from "../../components/CustomSelect";
+import LocationMapPicker from "../../components/LocationMapPicker";
 
 const DEFAULT_SLOTS = [
   { startTime: "06:00", endTime: "07:00" },
@@ -12,9 +14,20 @@ const DEFAULT_SLOTS = [
   { startTime: "08:00", endTime: "09:00" },
 ];
 
+const ENVIRONMENT_OPTIONS = [
+  { value: "INDOOR", label: "Indoor" },
+  { value: "OUTDOOR", label: "Outdoor" },
+  { value: "SEMI_INDOOR", label: "Semi indoor" },
+  { value: "SEMI_OUTDOOR", label: "Semi outdoor" },
+];
+
 const emptyForm = {
   name: "",
   pricePerHour: "",
+  environmentType: "OUTDOOR",
+  address: "",
+  latitude: "",
+  longitude: "",
   isActive: true,
   timeSlots: DEFAULT_SLOTS,
 };
@@ -37,9 +50,17 @@ function courtImages(court) {
 }
 
 function nextHour(hhmm) {
-  const [h, m] = hhmm.split(":").map(Number);
+  const normalized = normalizeTimeValue(hhmm);
+  const [h, m] = normalized.split(":").map(Number);
   const next = (h + 1) % 24;
-  return `${String(next).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  return `${String(next).padStart(2, "0")}:${String(m || 0).padStart(2, "0")}`;
+}
+
+function normalizeTimeValue(hhmm) {
+  const raw = String(hhmm || "").trim();
+  const match = raw.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return raw.slice(0, 5);
+  return `${String(Number(match[1])).padStart(2, "0")}:${match[2]}`;
 }
 
 export default function OwnerCourtsPanel() {
@@ -102,6 +123,16 @@ export default function OwnerCourtsPanel() {
     setForm({
       name: court.name || "",
       pricePerHour: String(court.pricePerHour ?? ""),
+      environmentType: court.environmentType || "OUTDOOR",
+      address: court.address || "",
+      latitude:
+        court.latitude != null && court.latitude !== ""
+          ? String(court.latitude)
+          : "",
+      longitude:
+        court.longitude != null && court.longitude !== ""
+          ? String(court.longitude)
+          : "",
       isActive: court.isActive !== false,
       timeSlots:
         court.timeSlots?.length > 0
@@ -146,10 +177,23 @@ export default function OwnerCourtsPanel() {
   const addSlot = () => {
     setForm((f) => {
       const last = f.timeSlots[f.timeSlots.length - 1];
-      const start = last ? last.endTime : "06:00";
+      const start = last
+        ? normalizeTimeValue(last.endTime)
+        : "06:00";
+      const end = nextHour(start);
+      // Avoid wrapping into a duplicate overnight cycle
+      if (
+        f.timeSlots.some(
+          (s) =>
+            normalizeTimeValue(s.startTime) === start &&
+            normalizeTimeValue(s.endTime) === end
+        )
+      ) {
+        return f;
+      }
       return {
         ...f,
-        timeSlots: [...f.timeSlots, { startTime: start, endTime: nextHour(start) }],
+        timeSlots: [...f.timeSlots, { startTime: start, endTime: end }],
       };
     });
   };
@@ -162,10 +206,11 @@ export default function OwnerCourtsPanel() {
   };
 
   const updateSlot = (index, field, value) => {
+    const next = normalizeTimeValue(value);
     setForm((f) => ({
       ...f,
       timeSlots: f.timeSlots.map((slot, i) =>
-        i === index ? { ...slot, [field]: value } : slot
+        i === index ? { ...slot, [field]: next } : slot
       ),
     }));
   };
@@ -176,6 +221,15 @@ export default function OwnerCourtsPanel() {
       setError("Add at least one time slot.");
       return;
     }
+    const normalizedSlots = form.timeSlots.map((s) => ({
+      startTime: normalizeTimeValue(s.startTime),
+      endTime: normalizeTimeValue(s.endTime),
+    }));
+    const keys = normalizedSlots.map((s) => `${s.startTime}|${s.endTime}`);
+    if (new Set(keys).size !== keys.length) {
+      setError("Duplicate time slots found. Remove duplicates and try again.");
+      return;
+    }
     setSaving(true);
     setError("");
     setMessage("");
@@ -183,8 +237,16 @@ export default function OwnerCourtsPanel() {
       const formData = new FormData();
       formData.append("name", form.name.trim());
       formData.append("pricePerHour", String(Number(form.pricePerHour)));
+      formData.append("environmentType", form.environmentType || "OUTDOOR");
+      formData.append("address", form.address.trim());
+      if (form.latitude !== "") {
+        formData.append("latitude", String(Number(form.latitude)));
+      }
+      if (form.longitude !== "") {
+        formData.append("longitude", String(Number(form.longitude)));
+      }
       formData.append("isActive", String(form.isActive));
-      formData.append("timeSlots", JSON.stringify(form.timeSlots));
+      formData.append("timeSlots", JSON.stringify(normalizedSlots));
 
       if (editingId) {
         formData.append("existingImages", JSON.stringify(existingImages));
@@ -260,6 +322,30 @@ export default function OwnerCourtsPanel() {
               setForm((f) => ({ ...f, pricePerHour: e.target.value }))
             }
             required
+          />
+          <CustomSelect
+            label="Environment type"
+            value={form.environmentType}
+            onChange={(v) =>
+              setForm((f) => ({ ...f, environmentType: v || "OUTDOOR" }))
+            }
+            placeholder="Select environment"
+            allowEmpty={false}
+            options={ENVIRONMENT_OPTIONS}
+            className="md:col-span-2"
+          />
+          <LocationMapPicker
+            latitude={form.latitude}
+            longitude={form.longitude}
+            address={form.address}
+            onChange={({ latitude, longitude, address }) =>
+              setForm((f) => ({
+                ...f,
+                latitude,
+                longitude,
+                address: address ?? f.address,
+              }))
+            }
           />
         </div>
 
@@ -461,7 +547,7 @@ export default function OwnerCourtsPanel() {
           <button
             type="submit"
             disabled={saving}
-            className="rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-sm font-bold text-[var(--color-background)] disabled:opacity-60"
+            className="rounded-full bg-[var(--color-secondary)] px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
           >
             {saving ? "Saving..." : editingId ? "Update court" : "Create court"}
           </button>
@@ -544,7 +630,26 @@ export default function OwnerCourtsPanel() {
                           <span className="text-white/45"> / hr</span>
                         </span>
                       </div>
-                      
+                      <p className="mt-1 text-xs text-white/45">
+                        {String(court.environmentType || "OUTDOOR").replace(
+                          /_/g,
+                          " "
+                        )}
+                      </p>
+                      {court.address && (
+                        <p className="mt-1 truncate text-xs text-white/40">
+                          {court.address}
+                        </p>
+                      )}
+                      {(court.latitude != null || court.longitude != null) && (
+                        <p className="mt-0.5 font-mono text-[10px] text-white/35">
+                          {court.latitude != null ? Number(court.latitude) : "—"}
+                          ,{" "}
+                          {court.longitude != null
+                            ? Number(court.longitude)
+                            : "—"}
+                        </p>
+                      )}
                     </div>
                   </div>
 

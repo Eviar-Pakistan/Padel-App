@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "../context/CartContext";
+import { NotificationsProvider } from "../context/NotificationsContext";
 import Home from "../pages/Home";
 import Login from "../pages/Login";
 import Register from "../pages/Register";
@@ -16,91 +17,129 @@ import Profile from "../pages/Profile";
 import Shop from "../pages/Shop";
 import ShopProductDetails from "../pages/ShopProductDetails";
 import Cart from "../pages/Cart";
+import CourtBooking from "../pages/CourtBooking";
+import CourtDetails from "../pages/CourtDetails";
+import MyBookings from "../pages/MyBookings";
+import Notifications from "../pages/Notifications";
 
 export default function AppRoutes() {
   return (
     <BrowserRouter>
       <CartProvider>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Home />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/news"
-            element={
-              <ProtectedRoute>
-                <NewsFeed />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/shop"
-            element={
-              <ProtectedRoute>
-                <Shop />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/shop/:id"
-            element={
-              <ProtectedRoute>
-                <ShopProductDetails />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/cart"
-            element={
-              <ProtectedRoute>
-                <Cart />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            }
-          />
+        <NotificationsProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Home />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/news"
+              element={
+                <ProtectedRoute>
+                  <NewsFeed />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <ProtectedRoute>
+                  <Notifications />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/courts"
+              element={
+                <ProtectedRoute>
+                  <CourtBooking />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/courts/:id"
+              element={
+                <ProtectedRoute>
+                  <CourtDetails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/bookings"
+              element={
+                <ProtectedRoute>
+                  <MyBookings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/shop"
+              element={
+                <ProtectedRoute>
+                  <Shop />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/shop/:id"
+              element={
+                <ProtectedRoute>
+                  <ShopProductDetails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cart"
+              element={
+                <ProtectedRoute>
+                  <Cart />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              }
+            />
 
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route
-            path="/admin/dashboard"
-            element={
-              <AdminProtectedRoute>
-                <AdminDashboard />
-              </AdminProtectedRoute>
-            }
-          />
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route
+              path="/admin/dashboard"
+              element={
+                <AdminProtectedRoute>
+                  <AdminDashboard />
+                </AdminProtectedRoute>
+              }
+            />
 
-          <Route path="/owner/login" element={<OwnerLogin />} />
-          <Route
-            path="/owner/dashboard"
-            element={
-              <OwnerProtectedRoute>
-                <OwnerDashboard />
-              </OwnerProtectedRoute>
-            }
-          />
-          <Route
-            path="/owner/products/:id"
-            element={
-              <OwnerProtectedRoute>
-                <OwnerProductDetails />
-              </OwnerProtectedRoute>
-            }
-          />
-        </Routes>
+            <Route path="/owner/login" element={<OwnerLogin />} />
+            <Route
+              path="/owner/dashboard"
+              element={
+                <OwnerProtectedRoute>
+                  <OwnerDashboard />
+                </OwnerProtectedRoute>
+              }
+            />
+            <Route
+              path="/owner/products/:id"
+              element={
+                <OwnerProtectedRoute>
+                  <OwnerProductDetails />
+                </OwnerProtectedRoute>
+              }
+            />
+          </Routes>
+        </NotificationsProvider>
       </CartProvider>
     </BrowserRouter>
   );

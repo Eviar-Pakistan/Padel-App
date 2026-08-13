@@ -66,6 +66,44 @@ export class CourtsController {
     return this.courtsService.findOwnerBookings(req.user.userId);
   }
 
+  @UseGuards(JwtAuthGuard, UserGuard)
+  @Get('bookings/joinable')
+  findJoinableBookings(
+    @Req() req: { user: { userId: number } },
+    @Query('date') date: string,
+    @Query('courtId') courtId?: string,
+    @Query('paddleOwnerId') paddleOwnerId?: string,
+  ) {
+    const dateStr = date || new Date().toISOString().slice(0, 10);
+    return this.courtsService.findJoinableBookings({
+      date: dateStr,
+      courtId: courtId || undefined,
+      paddleOwnerId: paddleOwnerId ? Number(paddleOwnerId) : undefined,
+      excludeUserId: req.user.userId,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard, UserGuard)
+  @Post('bookings/:bookingId/join')
+  requestJoinBooking(
+    @Param('bookingId') bookingId: string,
+    @Req() req: { user: { userId: number } },
+  ) {
+    return this.courtsService.requestJoinBooking(req.user.userId, bookingId);
+  }
+
+  @UseGuards(JwtAuthGuard, UserGuard)
+  @Post('bookings/join-requests/:joinRequestId/accept')
+  acceptJoinRequest(
+    @Param('joinRequestId') joinRequestId: string,
+    @Req() req: { user: { userId: number } },
+  ) {
+    return this.courtsService.acceptJoinRequest(
+      req.user.userId,
+      joinRequestId,
+    );
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.courtsService.findOne(id);
@@ -125,5 +163,14 @@ export class CourtsController {
       req.user.userId,
       dto,
     );
+  }
+
+  @UseGuards(JwtAuthGuard, PaddleOwnerGuard)
+  @Delete('bookings/:bookingId')
+  deleteBooking(
+    @Param('bookingId') bookingId: string,
+    @Req() req: { user: { userId: number } },
+  ) {
+    return this.courtsService.deleteBooking(bookingId, req.user.userId);
   }
 }

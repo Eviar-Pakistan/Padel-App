@@ -175,7 +175,7 @@ export default function ShopProductDetails() {
                     setAdded(true);
                     setTimeout(() => setAdded(false), 1500);
                   }}
-                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--color-primary)] py-3 text-sm font-bold text-[var(--color-background)]"
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--color-secondary)] py-3 text-sm font-bold text-white"
                 >
                   <FaPlus className="h-3.5 w-3.5" />
                   {added ? "Added to cart" : "Add to cart"}

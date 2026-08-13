@@ -17,7 +17,8 @@ import {
   FaUserTie,
 } from "react-icons/fa";
 import paddleLogo from "../assets/images/padel_logo.png";
-import { useCart } from "../context/CartContext";
+import { useCart, notifyAuthChanged } from "../context/CartContext";
+import { useNotifications } from "../context/NotificationsContext";
 
 const panelLinks = [
   { id: "home", label: "Home", icon: FaHome, path: "/" },
@@ -33,12 +34,12 @@ const panelLinks = [
 ];
 
 export default function TopNav({
-  hasNotification = true,
   onNotificationClick,
 }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const { count } = useCart();
+  const { unreadCount } = useNotifications();
 
   useEffect(() => {
     if (!open) return undefined;
@@ -53,8 +54,14 @@ export default function TopNav({
 
   const handleLogout = () => {
     localStorage.removeItem("accessToken");
+    notifyAuthChanged();
     close();
     navigate("/login");
+  };
+
+  const openNotifications = () => {
+    if (onNotificationClick) onNotificationClick();
+    else navigate("/notifications");
   };
 
   return (
@@ -96,13 +103,15 @@ export default function TopNav({
             </button>
             <button
               type="button"
-              onClick={onNotificationClick}
+              onClick={openNotifications}
               aria-label="Notifications"
-              className="relative flex h-10 w-10 items-center justify-center rounded-full"
+              className="relative flex h-10 w-10 items-center justify-center rounded-full text-white hover:bg-white/5"
             >
-              <FaBell className="h-5 w-5 text-white" />
-              {hasNotification && (
-                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" />
+              <FaBell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
               )}
             </button>
           </div>

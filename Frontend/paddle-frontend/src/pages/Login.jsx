@@ -4,6 +4,7 @@ import { FaPhoneAlt, FaLock, FaCheck } from "react-icons/fa";
 import AuthShell from "../components/AuthShell";
 import AuthInput from "../components/AuthInput";
 import { login } from "../api/auth";
+import { notifyAuthChanged } from "../context/CartContext";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ export default function Login() {
 
       if (token) {
         localStorage.setItem("accessToken", token);
+        notifyAuthChanged();
         navigate("/");
       } else {
         setError("Login succeeded but no access token was returned.");
@@ -91,7 +93,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="mt-2 w-full rounded-full bg-[var(--color-primary)] py-3.5 text-base font-bold text-[var(--color-background)] transition hover:brightness-95 disabled:opacity-60"
+              className="mt-2 w-full rounded-full bg-[var(--color-secondary)] py-3.5 text-base font-bold text-white transition hover:brightness-95 disabled:opacity-60"
             >
               {loading ? "Logging in..." : "Login"}
             </button>

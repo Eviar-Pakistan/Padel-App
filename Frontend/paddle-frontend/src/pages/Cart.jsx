@@ -120,7 +120,7 @@ export default function Cart() {
               <button
                 type="button"
                 onClick={() => navigate("/shop")}
-                className="rounded-full bg-[var(--color-primary)] px-5 py-2 text-sm font-bold text-[var(--color-background)]"
+                className="rounded-full bg-[var(--color-secondary)] px-5 py-2 text-sm font-bold text-white"
               >
                 Browse shop
               </button>
@@ -230,7 +230,7 @@ export default function Cart() {
                 type="button"
                 disabled={placing}
                 onClick={placeOrder}
-                className="w-full rounded-full bg-[var(--color-primary)] py-3 text-sm font-bold text-[var(--color-background)] disabled:opacity-60"
+                className="w-full rounded-full bg-[var(--color-secondary)] py-3 text-sm font-bold text-white disabled:opacity-60"
               >
                 {placing ? "Placing order..." : "Place order"}
               </button>

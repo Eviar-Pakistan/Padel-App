@@ -624,7 +624,7 @@ export default function Shop() {
                         e.stopPropagation();
                         addItem(product);
                       }}
-                      className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--color-primary)] text-[var(--color-background)] shadow-lg hover:brightness-110"
+                      className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--color-secondary)] text-white shadow-lg hover:brightness-110"
                     >
                       <FaPlus className="h-3 w-3" />
                     </button>

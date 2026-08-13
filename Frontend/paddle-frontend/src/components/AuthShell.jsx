@@ -12,8 +12,8 @@ export default function AuthShell({ children }) {
         }}
       />
 
-      <div className="relative z-10 flex w-full flex-col items-center pt-10 pb-4">
-        <img src={paddleLogo} alt="Paddle" className="h-20" />
+      <div className="relative z-10 flex w-full flex-col items-center pt-4 pb-4">
+        <img src={paddleLogo} alt="Paddle" className="h-25" />
       </div>
 
       <div className="relative z-10 flex w-full max-w-md flex-1 flex-col px-6 pb-10 mt-7">

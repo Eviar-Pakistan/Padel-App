@@ -290,7 +290,7 @@ export default function NewsFeed() {
                 setEditingPost(null);
                 setShowComposer(true);
               }}
-              className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-primary)] px-3 py-1.5 text-xs font-bold text-[var(--color-background)]"
+              className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-secondary)] px-3 py-1.5 text-xs font-bold text-white"
             >
               <FaPlus className="h-3 w-3" />
               Add Post
@@ -960,7 +960,7 @@ function PostComposer({ post, categories, onClose, onSaved }) {
         <button
           type="submit"
           disabled={saving}
-          className="w-full rounded-full bg-[var(--color-primary)] py-3 text-sm font-bold text-[var(--color-background)] disabled:opacity-60"
+          className="w-full rounded-full bg-[var(--color-secondary)] py-3 text-sm font-bold text-white disabled:opacity-60"
         >
           {saving ? "Posting..." : post ? "Update" : "Post"}
         </button>
@@ -1140,7 +1140,7 @@ function CommentsSheet({ postId, onClose, onCountChange }) {
             <button
               type="submit"
               disabled={sending || !body.trim()}
-              className="rounded-full bg-[var(--color-primary)] px-3 text-[var(--color-background)] disabled:opacity-50"
+              className="rounded-full bg-[var(--color-secondary)] px-3 text-white disabled:opacity-50"
             >
               <FaPaperPlane className="h-3.5 w-3.5" />
             </button>

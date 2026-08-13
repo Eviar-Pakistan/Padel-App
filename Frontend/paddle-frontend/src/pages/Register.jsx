@@ -133,7 +133,7 @@ export default function Register() {
 
               <button
                 type="submit"
-                className="mt-2 w-full rounded-full bg-[var(--color-primary)] py-3.5 text-base font-bold text-[var(--color-background)] transition hover:brightness-95"
+                className="mt-2 w-full rounded-full bg-[var(--color-secondary)] py-3.5 text-base font-bold text-white transition hover:brightness-95"
               >
                 Continue
               </button>
@@ -180,7 +180,7 @@ export default function Register() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full rounded-full bg-[var(--color-primary)] py-3.5 text-base font-bold text-[var(--color-background)] transition hover:brightness-95 disabled:opacity-60"
+                  className="w-full rounded-full bg-[var(--color-secondary)] py-3.5 text-base font-bold text-white transition hover:brightness-95 disabled:opacity-60"
                 >
                   {loading ? "Registering..." : "Register Now"}
                 </button>

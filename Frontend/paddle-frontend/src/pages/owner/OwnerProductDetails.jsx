@@ -229,7 +229,7 @@ export default function OwnerProductDetails() {
               <div className="flex flex-wrap gap-2">
                 <Link
                   to={`/owner/dashboard?tab=products&edit=${product.id}`}
-                  className="rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-sm font-bold text-[var(--color-background)]"
+                  className="rounded-full bg-[var(--color-secondary)] px-5 py-2.5 text-sm font-bold text-white"
                 >
                   Edit product
                 </Link>

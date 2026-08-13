@@ -90,7 +90,7 @@ export default function OwnerLogin() {
             <button
               type="submit"
               disabled={loading}
-              className="mt-1 w-full rounded-full bg-[var(--color-primary)] py-3.5 text-base font-bold text-[var(--color-background)] transition hover:brightness-95 disabled:opacity-60"
+              className="mt-1 w-full rounded-full bg-[var(--color-secondary)] py-3.5 text-base font-bold text-white transition hover:brightness-95 disabled:opacity-60"
             >
               {loading ? "Signing in..." : "Sign in"}
             </button>

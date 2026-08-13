@@ -2,11 +2,12 @@ import { useState } from "react";
 import {
   FaBuilding,
   FaUser,
-  FaMapMarkerAlt,
   FaPhoneAlt,
   FaLock,
 } from "react-icons/fa";
 import AuthInput from "../../components/AuthInput";
+import CustomSelect from "../../components/CustomSelect";
+import { PAKISTAN_CITIES } from "../../constants/pakistanCities";
 import { createOrganization } from "../../api/admin";
 
 const initialForm = {
@@ -31,6 +32,12 @@ export default function CreateOrganizationPanel({ onCreated }) {
     e.preventDefault();
     setError("");
     setSuccess("");
+
+    if (!form.location.trim()) {
+      setError("Please select a location.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -88,13 +95,14 @@ export default function CreateOrganizationPanel({ onCreated }) {
           placeholder="clubowner1"
           required
         />
-        <AuthInput
+        <CustomSelect
           label="Location"
-          icon={FaMapMarkerAlt}
           value={form.location}
-          onChange={updateField("location")}
-          placeholder="Karachi"
-          required
+          onChange={(v) => setForm((prev) => ({ ...prev, location: v }))}
+          placeholder="Select city"
+          searchable
+          searchPlaceholder="Search Pakistan cities..."
+          options={PAKISTAN_CITIES}
         />
         <AuthInput
           label="Contact number"
@@ -129,7 +137,7 @@ export default function CreateOrganizationPanel({ onCreated }) {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-full bg-[var(--color-primary)] py-3.5 text-base font-bold text-[var(--color-background)] transition hover:brightness-95 disabled:opacity-60 md:w-auto md:px-8"
+          className="w-full rounded-full bg-[var(--color-secondary)] py-3.5 text-base font-bold text-white transition hover:brightness-95 disabled:opacity-60 md:w-auto md:px-8"
         >
           {loading ? "Creating..." : "Create organization"}
         </button>

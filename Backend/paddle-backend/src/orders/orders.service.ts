@@ -4,7 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ProductStatus } from '../../generated/prisma/client';
+import {
+  OrderStatus,
+  Prisma,
+  ProductStatus,
+} from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
@@ -12,6 +16,24 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 @Injectable()
 export class OrdersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private orderStatusMessage(orderId: string, status: OrderStatus): string {
+    const shortId = orderId.slice(0, 8);
+    switch (status) {
+      case OrderStatus.PENDING:
+        return `Your order #${shortId} is pending review.`;
+      case OrderStatus.CONFIRMED:
+        return `Your order #${shortId} has been confirmed.`;
+      case OrderStatus.SHIPPED:
+        return `Your order #${shortId} has been shipped.`;
+      case OrderStatus.DELIVERED:
+        return `Your order #${shortId} has been delivered.`;
+      case OrderStatus.CANCELLED:
+        return `Your order #${shortId} has been cancelled.`;
+      default:
+        return `Your order #${shortId} status was updated to ${status}.`;
+    }
+  }
 
   async create(userId: number, dto: CreateOrderDto) {
     const productIds = dto.items.map((item) => item.productId);
@@ -198,9 +220,9 @@ export class OrdersService {
     paddleOwnerId: number,
     dto: UpdateOrderStatusDto,
   ) {
-    await this.findOneForOwner(orderId, paddleOwnerId);
+    const existing = await this.findOneForOwner(orderId, paddleOwnerId);
 
-    return this.prisma.order.update({
+    const order = await this.prisma.order.update({
       where: { id: orderId },
       data: { status: dto.status },
       include: {
@@ -222,5 +244,18 @@ export class OrdersService {
         },
       },
     });
+
+    if (existing.status !== dto.status) {
+      await this.prisma.notification.create({
+        data: {
+          receiverId: order.userId,
+          senderId: paddleOwnerId,
+          type: 'Order Status',
+          message: this.orderStatusMessage(order.id, dto.status),
+        },
+      });
+    }
+
+    return order;
   }
 }

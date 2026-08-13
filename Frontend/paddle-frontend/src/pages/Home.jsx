@@ -63,6 +63,7 @@ export default function Home() {
               onClick={() => {
                 if (id === "news") navigate("/news");
                 if (id === "shop") navigate("/shop");
+                if (id === "booking") navigate("/courts");
               }}
               className="relative flex aspect-square flex-col items-start justify-between rounded-[22px] bg-[#1c2430] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:bg-[#222b38]"
             >

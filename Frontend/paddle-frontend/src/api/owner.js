@@ -19,6 +19,8 @@ export const deleteCourt = (id) => ownerApi.delete(`courts/${id}`);
 export const getStoreBookings = () => ownerApi.get("courts/bookings/store");
 export const updateBookingStatus = (bookingId, data) =>
   ownerApi.patch(`courts/bookings/${bookingId}/status`, data);
+export const deleteBooking = (bookingId) =>
+  ownerApi.delete(`courts/bookings/${bookingId}`);
 
 // Coaches
 export const getCoaches = () => ownerApi.get("coaches");

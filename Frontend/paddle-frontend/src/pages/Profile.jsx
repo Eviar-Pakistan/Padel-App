@@ -357,7 +357,7 @@ export default function Profile() {
               <button
                 type="submit"
                 disabled={savingPersonal}
-                className="rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-sm font-bold text-[var(--color-background)] disabled:opacity-60"
+                className="rounded-full bg-[var(--color-secondary)] px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
               >
                 {savingPersonal ? "Saving..." : "Save personal details"}
               </button>
@@ -477,7 +477,7 @@ export default function Profile() {
               <button
                 type="submit"
                 disabled={savingPassword}
-                className="rounded-full border border-[var(--color-primary)]/40 px-5 py-2.5 text-sm font-bold text-[var(--color-primary)] disabled:opacity-60"
+                className="rounded-full border border-[var(--color-secondary)]/40 px-5 py-2.5 text-sm font-bold text-[var(--color-secondary)] disabled:opacity-60"
               >
                 {savingPassword ? "Updating..." : "Change password"}
               </button>
