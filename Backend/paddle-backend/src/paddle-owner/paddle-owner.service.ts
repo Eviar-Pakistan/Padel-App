@@ -81,7 +81,7 @@ export class PaddleOwnerService {
       this.prisma.courtBooking.count({
         where: { court: { paddleOwnerId } },
       }),
-      this.prisma.coach.count(),
+      this.prisma.coach.count({ where: { paddleOwnerId } }),
       this.prisma.product.count({ where: { paddleOwnerId } }),
       this.prisma.order.count({ where: { paddleOwnerId } }),
       this.prisma.courtBooking.findMany({

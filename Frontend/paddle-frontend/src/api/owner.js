@@ -24,9 +24,20 @@ export const deleteBooking = (bookingId) =>
 
 // Coaches
 export const getCoaches = () => ownerApi.get("coaches");
-export const createCoach = (data) => ownerApi.post("coaches", data);
-export const updateCoach = (id, data) => ownerApi.patch(`coaches/${id}`, data);
+export const createCoach = (formData) =>
+  ownerApi.post("coaches", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+export const updateCoach = (id, formData) =>
+  ownerApi.patch(`coaches/${id}`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
 export const deleteCoach = (id) => ownerApi.delete(`coaches/${id}`);
+export const getStoreCoachBookings = () => ownerApi.get("coaches/bookings/store");
+export const updateCoachBookingStatus = (bookingId, data) =>
+  ownerApi.patch(`coaches/bookings/${bookingId}/status`, data);
+export const deleteCoachBooking = (bookingId) =>
+  ownerApi.delete(`coaches/bookings/${bookingId}`);
 
 // Products
 export const getMyProducts = () => ownerApi.get("products/mine");

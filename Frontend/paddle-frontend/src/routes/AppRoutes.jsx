@@ -21,6 +21,9 @@ import CourtBooking from "../pages/CourtBooking";
 import CourtDetails from "../pages/CourtDetails";
 import MyBookings from "../pages/MyBookings";
 import Notifications from "../pages/Notifications";
+import Coaches from "../pages/Coaches";
+import CoachDetails from "../pages/CoachDetails";
+import Chat from "../pages/Chat";
 
 export default function AppRoutes() {
   return (
@@ -107,6 +110,30 @@ export default function AppRoutes() {
               element={
                 <ProtectedRoute>
                   <Profile />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/coaches"
+              element={
+                <ProtectedRoute>
+                  <Coaches />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/coaches/:id"
+              element={
+                <ProtectedRoute>
+                  <CoachDetails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/chat"
+              element={
+                <ProtectedRoute>
+                  <Chat />
                 </ProtectedRoute>
               }
             />

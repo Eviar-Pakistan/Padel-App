@@ -32,6 +32,7 @@ model User {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   coachReviews  CoachReview[]
+  coachBookings CoachBooking[]
   orders        Order[]
   courtBookings CourtBooking[]
   courtBookingParticipants CourtBookingParticipant[]
@@ -42,6 +43,9 @@ model User {
   newsSaves     NewsSave[]
   newsComments  NewsComment[]
   newsCommentLikes NewsCommentLike[]
+  chatMemberships ChatGroupMember[]
+  chatJoinRequests ChatJoinRequest[]
+  chatMessages  ChatMessage[]
 }
 
 model PaddleOwner {
@@ -59,6 +63,9 @@ model PaddleOwner {
   orders           Order[]
   courts           Court[]
   newsPosts        NewsPost[]
+  coaches          Coach[]
+  chatGroups       ChatGroup[]
+  chatMessages     ChatMessage[]
 }
 
 enum ProductStatus {
@@ -187,6 +194,16 @@ enum CoachStatus {
   SUSPENDED
 }
 
+enum WeekDay {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+}
+
 model Coach {
   id                 String       @id @default(uuid())
   firstName          String
@@ -203,13 +220,20 @@ model Coach {
   certificationLevel String?
   specialties        Json? // string[] stored as JSON (SQLite)
   sessionRate        Decimal?
+  availableFromDay   WeekDay?
+  availableToDay     WeekDay?
+  availableFromTime  String? // "09:00"
+  availableToTime    String? // "18:00"
   isVerified         Boolean      @default(false)
   rating             Decimal?     @default(0)
   totalReviews       Int          @default(0)
   status             CoachStatus  @default(ACTIVE)
+  paddleOwnerId      Int?
+  paddleOwner        PaddleOwner? @relation(fields: [paddleOwnerId], references: [id], onDelete: SetNull)
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
   reviews            CoachReview[]
+  bookings           CoachBooking[]
 }
 
 model CoachReview {
@@ -224,6 +248,26 @@ model CoachReview {
   updatedAt DateTime @updatedAt
 
   @@unique([coachId, userId])
+}
+
+model CoachBooking {
+  id          String        @id @default(uuid())
+  coachId     String
+  userId      Int
+  bookingDate DateTime
+  startTime   String // "16:00"
+  endTime     String // "17:00"
+  status      BookingStatus @default(CONFIRMED)
+  totalPrice  Decimal
+  notes       String?
+  coach       Coach         @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([coachId, bookingDate, startTime])
+  @@index([userId])
+  @@index([coachId])
 }
 
 model SuperAdmin {
@@ -469,4 +513,77 @@ model Notification {
   @@index([type])
   @@index([receiverId, createdAt])
   @@index([receiverId, isRead])
+}
+
+enum ChatMessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  FILE
+}
+
+enum ChatJoinStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model ChatGroup {
+  id            String             @id @default(uuid())
+  name          String
+  description   String?
+  image         String?
+  paddleOwnerId Int
+  paddleOwner   PaddleOwner        @relation(fields: [paddleOwnerId], references: [id], onDelete: Cascade)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  members       ChatGroupMember[]
+  messages      ChatMessage[]
+  joinRequests  ChatJoinRequest[]
+}
+
+model ChatGroupMember {
+  id       String    @id @default(uuid())
+  groupId  String
+  userId   Int
+  group    ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt DateTime  @default(now())
+
+  @@unique([groupId, userId])
+  @@index([userId])
+}
+
+model ChatJoinRequest {
+  id        String         @id @default(uuid())
+  groupId   String
+  userId    Int
+  status    ChatJoinStatus @default(PENDING)
+  group     ChatGroup      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([groupId, userId])
+  @@index([groupId, status])
+}
+
+model ChatMessage {
+  id            String          @id @default(uuid())
+  groupId       String
+  senderUserId  Int?
+  senderOwnerId Int?
+  type          ChatMessageType @default(TEXT)
+  text          String?
+  mediaUrl      String?
+  fileName      String?
+  mimeType      String?
+  durationSec   Int?
+  createdAt     DateTime        @default(now())
+  group         ChatGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  senderUser    User?           @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
+  senderOwner   PaddleOwner?    @relation(fields: [senderOwnerId], references: [id], onDelete: SetNull)
+
+  @@index([groupId, createdAt])
 }

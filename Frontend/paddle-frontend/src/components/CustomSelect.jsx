@@ -22,6 +22,8 @@ export default function CustomSelect({
   searchable = false,
   searchPlaceholder = "Search...",
   allowEmpty = true,
+  required = false,
+  icon: Icon,
   className = "",
 }) {
   const listId = useId();
@@ -78,7 +80,10 @@ export default function CustomSelect({
   return (
     <div ref={rootRef} className={`relative block ${className}`}>
       {label && (
-        <span className="mb-1.5 block text-xs text-white/45">{label}</span>
+        <span className="mb-1.5 block text-sm font-medium text-[var(--color-muted)]">
+          {label}
+          {required && <span className="ml-0.5 text-red-400">*</span>}
+        </span>
       )}
 
       <button
@@ -87,12 +92,15 @@ export default function CustomSelect({
         aria-expanded={open}
         aria-controls={listId}
         onClick={() => setOpen((v) => !v)}
-        className={`flex w-full items-center justify-between gap-3 rounded-xl border bg-[#0e1821] py-2.5 pl-3 pr-3.5 text-left text-sm outline-none transition ${
+        className={`flex w-full items-center gap-3 rounded-xl border bg-[#0e1821] py-3 pl-3 pr-3.5 text-left text-sm outline-none transition ${
           open
             ? "border-[var(--color-primary)]/50"
             : "border-white/10 hover:border-white/20"
         }`}
       >
+        {Icon && (
+          <Icon className="h-4 w-4 shrink-0 text-[var(--color-primary)]" />
+        )}
         <span
           className={`min-w-0 flex-1 truncate ${
             display ? "text-white" : "text-white/35"

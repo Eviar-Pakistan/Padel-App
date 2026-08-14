@@ -12,6 +12,7 @@ import { OrdersModule } from './orders/orders.module';
 import { CourtsModule } from './courts/courts.module';
 import { NewsModule } from './news/news.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     CourtsModule,
     NewsModule,
     NotificationsModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

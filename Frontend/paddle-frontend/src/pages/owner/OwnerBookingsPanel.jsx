@@ -2,14 +2,18 @@ import { useEffect, useState } from "react";
 import { FaTrash } from "react-icons/fa";
 import {
   deleteBooking,
+  deleteCoachBooking,
   getStoreBookings,
+  getStoreCoachBookings,
   updateBookingStatus,
+  updateCoachBookingStatus,
 } from "../../api/owner";
 
 const statuses = ["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED"];
 
 export default function OwnerBookingsPanel() {
   const [bookings, setBookings] = useState([]);
+  const [coachBookings, setCoachBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState("");
@@ -18,8 +22,12 @@ export default function OwnerBookingsPanel() {
     setLoading(true);
     setError("");
     try {
-      const { data } = await getStoreBookings();
-      setBookings(data || []);
+      const [courtsRes, coachesRes] = await Promise.all([
+        getStoreBookings(),
+        getStoreCoachBookings(),
+      ]);
+      setBookings(courtsRes.data || []);
+      setCoachBookings(coachesRes.data || []);
     } catch (err) {
       const msg = err.response?.data?.message;
       setError(Array.isArray(msg) ? msg.join(", ") : msg || "Failed to load bookings.");
@@ -57,12 +65,37 @@ export default function OwnerBookingsPanel() {
     }
   };
 
+  const onCoachStatusChange = async (id, status) => {
+    try {
+      await updateCoachBookingStatus(id, { status });
+      await load();
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Status update failed.");
+    }
+  };
+
+  const onCoachDelete = async (id) => {
+    if (!window.confirm("Delete this coach session permanently?")) return;
+    setDeletingId(id);
+    setError("");
+    try {
+      await deleteCoachBooking(id);
+      await load();
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Delete failed.");
+    } finally {
+      setDeletingId("");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-white md:text-2xl">Bookings</h2>
         <p className="mt-1 text-sm text-[var(--color-muted)]">
-          Court bookings by users
+          Court and coach sessions booked by users
         </p>
       </div>
 
@@ -72,69 +105,148 @@ export default function OwnerBookingsPanel() {
 
       {loading ? (
         <p className="text-sm text-[var(--color-muted)]">Loading bookings...</p>
-      ) : bookings.length === 0 ? (
+      ) : bookings.length === 0 && coachBookings.length === 0 ? (
         <p className="text-sm text-[var(--color-muted)]">No bookings yet.</p>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-white/10 bg-[var(--color-surface)]">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-black/20 text-[var(--color-muted)]">
-                <tr>
-                  <th className="px-4 py-3 font-medium">User</th>
-                  <th className="px-4 py-3 font-medium">Court</th>
-                  <th className="px-4 py-3 font-medium">Slot</th>
-                  <th className="px-4 py-3 font-medium">Date</th>
-                  <th className="px-4 py-3 font-medium">Price</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bookings.map((b) => (
-                  <tr key={b.id} className="border-t border-white/5 text-white/90">
-                    <td className="px-4 py-3">
-                      <div>{b.user?.fullName}</div>
-                      <div className="text-xs text-[var(--color-muted)]">
-                        {b.user?.mobileNumber}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">{b.court?.name}</td>
-                    <td className="px-4 py-3">
-                      {b.timeSlot?.startTime} - {b.timeSlot?.endTime}
-                    </td>
-                    <td className="px-4 py-3">{String(b.bookingDate).slice(0, 10)}</td>
-                    <td className="px-4 py-3">PKR {String(b.totalPrice)}</td>
-                    <td className="px-4 py-3">
-                      <select
-                        className="rounded-lg border border-white/10 bg-[#0e1821] px-2 py-1.5 text-xs text-white"
-                        value={b.status}
-                        onChange={(e) => onStatusChange(b.id, e.target.value)}
-                      >
-                        {statuses.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        title="Delete booking"
-                        disabled={deletingId === b.id}
-                        onClick={() => onDelete(b.id)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50"
-                      >
-                        <FaTrash className="h-3 w-3" />
-                        {deletingId === b.id ? "Deleting..." : "Delete"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <>
+          {bookings.length > 0 && (
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-white">Court bookings</h3>
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-[var(--color-surface)]">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-black/20 text-[var(--color-muted)]">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">User</th>
+                        <th className="px-4 py-3 font-medium">Court</th>
+                        <th className="px-4 py-3 font-medium">Slot</th>
+                        <th className="px-4 py-3 font-medium">Date</th>
+                        <th className="px-4 py-3 font-medium">Price</th>
+                        <th className="px-4 py-3 font-medium">Status</th>
+                        <th className="px-4 py-3 font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bookings.map((b) => (
+                        <tr key={b.id} className="border-t border-white/5 text-white/90">
+                          <td className="px-4 py-3">
+                            <div>{b.user?.fullName}</div>
+                            <div className="text-xs text-[var(--color-muted)]">
+                              {b.user?.mobileNumber}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">{b.court?.name}</td>
+                          <td className="px-4 py-3">
+                            {b.timeSlot?.startTime} - {b.timeSlot?.endTime}
+                          </td>
+                          <td className="px-4 py-3">{String(b.bookingDate).slice(0, 10)}</td>
+                          <td className="px-4 py-3">PKR {String(b.totalPrice)}</td>
+                          <td className="px-4 py-3">
+                            <select
+                              className="rounded-lg border border-white/10 bg-[#0e1821] px-2 py-1.5 text-xs text-white"
+                              value={b.status}
+                              onChange={(e) => onStatusChange(b.id, e.target.value)}
+                            >
+                              {statuses.map((s) => (
+                                <option key={s} value={s}>
+                                  {s}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              title="Delete booking"
+                              disabled={deletingId === b.id}
+                              onClick={() => onDelete(b.id)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                            >
+                              <FaTrash className="h-3 w-3" />
+                              {deletingId === b.id ? "Deleting..." : "Delete"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-white">Coach sessions</h3>
+            {coachBookings.length === 0 ? (
+              <p className="text-sm text-[var(--color-muted)]">No coach sessions yet.</p>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-[var(--color-surface)]">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-black/20 text-[var(--color-muted)]">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">User</th>
+                        <th className="px-4 py-3 font-medium">Coach</th>
+                        <th className="px-4 py-3 font-medium">Time</th>
+                        <th className="px-4 py-3 font-medium">Date</th>
+                        <th className="px-4 py-3 font-medium">Price</th>
+                        <th className="px-4 py-3 font-medium">Status</th>
+                        <th className="px-4 py-3 font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {coachBookings.map((b) => (
+                        <tr key={b.id} className="border-t border-white/5 text-white/90">
+                          <td className="px-4 py-3">
+                            <div>{b.user?.fullName}</div>
+                            <div className="text-xs text-[var(--color-muted)]">
+                              {b.user?.mobileNumber}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            {b.coach
+                              ? `${b.coach.firstName} ${b.coach.lastName}`
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            {b.startTime} - {b.endTime}
+                          </td>
+                          <td className="px-4 py-3">{String(b.bookingDate).slice(0, 10)}</td>
+                          <td className="px-4 py-3">PKR {String(b.totalPrice)}</td>
+                          <td className="px-4 py-3">
+                            <select
+                              className="rounded-lg border border-white/10 bg-[#0e1821] px-2 py-1.5 text-xs text-white"
+                              value={b.status}
+                              onChange={(e) => onCoachStatusChange(b.id, e.target.value)}
+                            >
+                              {statuses.map((s) => (
+                                <option key={s} value={s}>
+                                  {s}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              title="Delete session"
+                              disabled={deletingId === b.id}
+                              onClick={() => onCoachDelete(b.id)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                            >
+                              <FaTrash className="h-3 w-3" />
+                              {deletingId === b.id ? "Deleting..." : "Delete"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        </>
       )}
     </div>
   );
