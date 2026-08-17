@@ -26,6 +26,8 @@ model User {
   handedness    String? // or an enum: LEFT / RIGHT / AMBIDEXTROUS
   skillLevel    String         @default("BEGINNER") // BEGINNER / INTERMEDIATE / ADVANCED
   location      String?
+  province      String?
+  isProfilePublic Boolean      @default(false)
   rank          Int            @default(0)
   points        Int            @default(0)
   wins          Int            @default(0)
@@ -33,6 +35,8 @@ model User {
   updatedAt     DateTime       @updatedAt
   coachReviews  CoachReview[]
   coachBookings CoachBooking[]
+  coachConversations CoachConversation[]
+  coachConversationMessages CoachConversationMessage[]
   orders        Order[]
   courtBookings CourtBooking[]
   courtBookingParticipants CourtBookingParticipant[]
@@ -46,6 +50,11 @@ model User {
   chatMemberships ChatGroupMember[]
   chatJoinRequests ChatJoinRequest[]
   chatMessages  ChatMessage[]
+  challengesSent PlayerChallenge[] @relation("ChallengeChallenger")
+  challengesReceived PlayerChallenge[] @relation("ChallengeOpponent")
+  playerConversationsLow UserConversation[] @relation("PlayerConvLow")
+  playerConversationsHigh UserConversation[] @relation("PlayerConvHigh")
+  playerConversationMessages UserConversationMessage[]
 }
 
 model PaddleOwner {
@@ -228,12 +237,15 @@ model Coach {
   rating             Decimal?     @default(0)
   totalReviews       Int          @default(0)
   status             CoachStatus  @default(ACTIVE)
+  password           String? // hashed; required for coach portal login
   paddleOwnerId      Int?
   paddleOwner        PaddleOwner? @relation(fields: [paddleOwnerId], references: [id], onDelete: SetNull)
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
   reviews            CoachReview[]
   bookings           CoachBooking[]
+  conversations      CoachConversation[]
+  conversationMessages CoachConversationMessage[]
 }
 
 model CoachReview {
@@ -257,17 +269,56 @@ model CoachBooking {
   bookingDate DateTime
   startTime   String // "16:00"
   endTime     String // "17:00"
-  status      BookingStatus @default(CONFIRMED)
+  status      BookingStatus @default(PENDING)
   totalPrice  Decimal
   notes       String?
   coach       Coach         @relation(fields: [coachId], references: [id], onDelete: Cascade)
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation CoachConversation?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   @@unique([coachId, bookingDate, startTime])
   @@index([userId])
   @@index([coachId])
+}
+
+model CoachConversation {
+  id             String   @id @default(uuid())
+  coachId        String
+  userId         Int
+  bookingId      String?  @unique
+  coachLastReadAt DateTime?
+  userLastReadAt  DateTime?
+  coach          Coach    @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  booking        CoachBooking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  messages       CoachConversationMessage[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([coachId, userId])
+  @@index([userId])
+  @@index([coachId])
+}
+
+model CoachConversationMessage {
+  id               String          @id @default(uuid())
+  conversationId   String
+  senderCoachId    String?
+  senderUserId     Int?
+  type             ChatMessageType @default(TEXT)
+  text             String?
+  mediaUrl         String?
+  fileName         String?
+  mimeType         String?
+  durationSec      Int?
+  createdAt        DateTime        @default(now())
+  conversation     CoachConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderCoach      Coach?          @relation(fields: [senderCoachId], references: [id], onDelete: SetNull)
+  senderUser       User?           @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
 }
 
 model SuperAdmin {
@@ -494,7 +545,7 @@ model NewsCommentLike {
 /// General-purpose notifications (type is a free-form string, not an enum).
 /// receiverId always refers to a User.
 /// senderId is a plain int (User id, PaddleOwner id, etc. depending on type).
-/// Current type examples: "Booking Details", "Shopping Details", "Court Slot Join", "Order Status"
+/// Current type examples: "Booking Details", "Shopping Details", "Court Slot Join", "Order Status", "Player Challenge", "Challenge Accepted"
 model Notification {
   id         String   @id @default(uuid())
   receiverId Int
@@ -513,6 +564,61 @@ model Notification {
   @@index([type])
   @@index([receiverId, createdAt])
   @@index([receiverId, isRead])
+}
+
+enum PlayerChallengeStatus {
+  PENDING
+  ACCEPTED
+}
+
+model PlayerChallenge {
+  id             String                 @id @default(uuid())
+  challengerId   Int
+  opponentId     Int
+  status         PlayerChallengeStatus  @default(PENDING)
+  conversationId String?                @unique
+  challenger     User                   @relation("ChallengeChallenger", fields: [challengerId], references: [id], onDelete: Cascade)
+  opponent       User                   @relation("ChallengeOpponent", fields: [opponentId], references: [id], onDelete: Cascade)
+  conversation   UserConversation?      @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([challengerId])
+  @@index([opponentId])
+  @@index([status])
+}
+
+model UserConversation {
+  id          String                     @id @default(uuid())
+  userLowId   Int
+  userHighId  Int
+  userLow     User                       @relation("PlayerConvLow", fields: [userLowId], references: [id], onDelete: Cascade)
+  userHigh    User                       @relation("PlayerConvHigh", fields: [userHighId], references: [id], onDelete: Cascade)
+  challenge   PlayerChallenge?
+  messages    UserConversationMessage[]
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+
+  @@unique([userLowId, userHighId])
+  @@index([userLowId])
+  @@index([userHighId])
+}
+
+model UserConversationMessage {
+  id             String           @id @default(uuid())
+  conversationId String
+  senderUserId   Int
+  type           ChatMessageType  @default(TEXT)
+  text           String?
+  mediaUrl       String?
+  fileName       String?
+  mimeType       String?
+  durationSec    Int?
+  createdAt      DateTime         @default(now())
+  conversation   UserConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderUser     User             @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }
 
 enum ChatMessageType {

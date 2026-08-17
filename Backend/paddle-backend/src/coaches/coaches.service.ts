@@ -4,15 +4,22 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
-import { BookingStatus, Prisma, WeekDay } from '../../generated/prisma/client';
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
+import { BookingStatus, ChatMessageType, Prisma, WeekDay } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImageUploadService } from '../common/image-upload.service';
+import { ChatMediaService } from '../chat/chat-media.service';
+import { Roles } from '../auth/roles';
 import { CreateCoachDto } from './dto/create-coach.dto';
 import { UpdateCoachDto } from './dto/update-coach.dto';
 import { CreateCoachReviewDto } from './dto/create-coach-review.dto';
 import { CreateCoachBookingDto } from './dto/create-coach-booking.dto';
 import { UpdateCoachBookingStatusDto } from './dto/update-coach-booking-status.dto';
+import { CoachLoginDto } from './dto/coach-login.dto';
+import { SendChatMessageDto } from '../chat/dto/send-chat-message.dto';
 
 const WEEK_ORDER: WeekDay[] = [
   WeekDay.MON,
@@ -39,7 +46,14 @@ export class CoachesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly imageUpload: ImageUploadService,
+    private readonly jwtService: JwtService,
+    private readonly chatMedia: ChatMediaService,
   ) {}
+
+  private sanitizeCoach<T extends { password?: string | null }>(coach: T) {
+    const { password: _password, ...rest } = coach;
+    return rest;
+  }
 
   private readonly ownerSelect = {
     id: true,
@@ -86,13 +100,15 @@ export class CoachesService {
     paddleOwnerId?: number,
   ) {
     const profileImage = await this.imageUpload.saveProfileImage(file);
-    return this.prisma.coach.create({
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const coach = await this.prisma.coach.create({
       data: {
         firstName: dto.firstName,
         lastName: dto.lastName,
         profileImage,
-        email: dto.email,
+        email: dto.email.trim().toLowerCase(),
         phoneNumber: dto.phoneNumber,
+        password: passwordHash,
         gender: dto.gender,
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
         nationality: dto.nationality,
@@ -115,6 +131,36 @@ export class CoachesService {
         ...(paddleOwnerId ? { paddleOwnerId } : {}),
       },
     });
+    return this.sanitizeCoach(coach);
+  }
+
+  async login(dto: CoachLoginDto) {
+    const coach = await this.prisma.coach.findUnique({
+      where: { email: dto.email.trim().toLowerCase() },
+    });
+    if (!coach?.password) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    const ok = await bcrypt.compare(dto.password, coach.password);
+    if (!ok) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    if (coach.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Coach account is not active');
+    }
+    const access_token = await this.jwtService.signAsync({
+      sub: coach.id,
+      email: coach.email,
+      role: Roles.COACH,
+    });
+    return {
+      access_token,
+      coach: this.sanitizeCoach(coach),
+    };
+  }
+
+  async me(coachId: string) {
+    return this.findOne(coachId);
   }
 
   findAll() {
@@ -125,7 +171,8 @@ export class CoachesService {
           reviews: this.reviewInclude,
         },
       })
-      .then((coaches) => this.attachOwners(coaches));
+      .then((coaches) => this.attachOwners(coaches))
+      .then((coaches) => coaches.map((c) => this.sanitizeCoach(c)));
   }
 
   async findOne(id: string) {
@@ -139,7 +186,7 @@ export class CoachesService {
       throw new NotFoundException('Coach not found');
     }
     const [withOwner] = await this.attachOwners([coach]);
-    return withOwner;
+    return this.sanitizeCoach(withOwner);
   }
 
   private async attachOwners<T extends { paddleOwnerId?: number | null }>(
@@ -175,15 +222,19 @@ export class CoachesService {
   ) {
     const existing = await this.findOne(id);
     const profileImage = await this.imageUpload.saveProfileImage(file);
+    const passwordHash = dto.password
+      ? await bcrypt.hash(dto.password, 10)
+      : undefined;
 
-    return this.prisma.coach.update({
+    const coach = await this.prisma.coach.update({
       where: { id },
       data: {
         firstName: dto.firstName,
         lastName: dto.lastName,
         ...(profileImage ? { profileImage } : {}),
         ...(paddleOwnerId && !existing.paddleOwnerId ? { paddleOwnerId } : {}),
-        email: dto.email,
+        ...(passwordHash ? { password: passwordHash } : {}),
+        ...(dto.email ? { email: dto.email.trim().toLowerCase() } : {}),
         phoneNumber: dto.phoneNumber,
         gender: dto.gender,
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
@@ -206,6 +257,7 @@ export class CoachesService {
         status: dto.status,
       },
     });
+    return this.sanitizeCoach(coach);
   }
 
   async remove(id: string) {
@@ -294,7 +346,7 @@ export class CoachesService {
     const totalPrice = new Prisma.Decimal(Number(coach.sessionRate) || 0);
     const data = {
       userId,
-      status: BookingStatus.CONFIRMED,
+      status: BookingStatus.PENDING,
       totalPrice,
       notes: dto.notes,
       endTime,
@@ -411,9 +463,278 @@ export class CoachesService {
           ),
         },
       });
+      if (dto.status === BookingStatus.CONFIRMED) {
+        await this.ensureConversation(booking.coachId, booking.userId, booking.id);
+      }
     }
 
     return updated;
+  }
+
+  findCoachBookings(coachId: string) {
+    return this.prisma.coachBooking.findMany({
+      where: { coachId },
+      orderBy: [{ bookingDate: 'desc' }, { createdAt: 'desc' }],
+      include: this.bookingInclude,
+    });
+  }
+
+  async respondToBooking(
+    coachId: string,
+    bookingId: string,
+    status: 'CONFIRMED' | 'CANCELLED',
+  ) {
+    const booking = await this.prisma.coachBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        coach: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+    if (booking.coachId !== coachId) {
+      throw new ForbiddenException('Not your booking');
+    }
+    if (booking.status !== BookingStatus.PENDING) {
+      throw new BadRequestException('This booking is no longer pending');
+    }
+
+    const updated = await this.prisma.coachBooking.update({
+      where: { id: bookingId },
+      data: { status },
+      include: this.bookingInclude,
+    });
+
+    const coachName =
+      `Coach ${booking.coach.firstName} ${booking.coach.lastName}`.trim();
+    await this.prisma.notification.create({
+      data: {
+        receiverId: booking.userId,
+        senderId: 0,
+        type: 'Coach Booking',
+        message: this.coachBookingStatusMessage(
+          coachName,
+          booking.bookingDate,
+          status,
+        ),
+        meta: {
+          coachId,
+          bookingId,
+          action: status === BookingStatus.CONFIRMED ? 'ACCEPTED' : 'REJECTED',
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    let conversation: { id: string } | null = null;
+    if (status === BookingStatus.CONFIRMED) {
+      conversation = await this.ensureConversation(
+        coachId,
+        booking.userId,
+        booking.id,
+      );
+    }
+
+    return { ...updated, conversation };
+  }
+
+  private async ensureConversation(
+    coachId: string,
+    userId: number,
+    bookingId?: string,
+  ) {
+    const existing = await this.prisma.coachConversation.findUnique({
+      where: { coachId_userId: { coachId, userId } },
+    });
+    if (existing) {
+      if (bookingId && !existing.bookingId) {
+        return this.prisma.coachConversation.update({
+          where: { id: existing.id },
+          data: { bookingId },
+        });
+      }
+      return existing;
+    }
+    return this.prisma.coachConversation.create({
+      data: { coachId, userId, bookingId },
+    });
+  }
+
+  async listCoachConversations(coachId: string) {
+    const conversations = await this.prisma.coachConversation.findMany({
+      where: { coachId },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            profileImage: true,
+            mobileNumber: true,
+          },
+        },
+        messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+    });
+
+    return Promise.all(
+      conversations.map(async (c) => {
+        const unreadCount = await this.prisma.coachConversationMessage.count({
+          where: {
+            conversationId: c.id,
+            senderUserId: { not: null },
+            ...(c.coachLastReadAt
+              ? { createdAt: { gt: c.coachLastReadAt } }
+              : {}),
+          },
+        });
+        return { ...c, unreadCount };
+      }),
+    );
+  }
+
+  listUserCoachConversations(userId: number) {
+    return this.prisma.coachConversation.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        coach: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            profileImage: true,
+          },
+        },
+        messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+    });
+  }
+
+  async listConversationMessages(
+    conversationId: string,
+    auth: { role?: string; userId: string | number },
+    after?: string,
+  ) {
+    const conversation = await this.prisma.coachConversation.findUnique({
+      where: { id: conversationId },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+    this.assertConversationAccess(conversation, auth);
+
+    // Opening the thread (or staying in it) marks messages as read for that side.
+    if (auth.role === Roles.COACH) {
+      await this.prisma.coachConversation.update({
+        where: { id: conversationId },
+        data: { coachLastReadAt: new Date() },
+      });
+    } else if (auth.role === Roles.USER && !after) {
+      await this.prisma.coachConversation.update({
+        where: { id: conversationId },
+        data: { userLastReadAt: new Date() },
+      });
+    }
+
+    const afterMsg = after
+      ? await this.prisma.coachConversationMessage.findUnique({
+          where: { id: after },
+        })
+      : null;
+
+    return this.prisma.coachConversationMessage.findMany({
+      where: {
+        conversationId,
+        ...(afterMsg ? { createdAt: { gt: afterMsg.createdAt } } : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+      take: afterMsg ? 100 : 80,
+      include: {
+        senderUser: {
+          select: { id: true, fullName: true, profileImage: true },
+        },
+        senderCoach: {
+          select: { id: true, firstName: true, lastName: true, profileImage: true },
+        },
+      },
+    });
+  }
+
+  async sendConversationMessage(
+    conversationId: string,
+    auth: { role?: string; userId: string | number },
+    dto: SendChatMessageDto,
+    file?: Express.Multer.File,
+  ) {
+    const conversation = await this.prisma.coachConversation.findUnique({
+      where: { id: conversationId },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+    this.assertConversationAccess(conversation, auth);
+
+    const isCoach = auth.role === Roles.COACH;
+    let mediaUrl: string | undefined;
+    let fileName: string | undefined;
+    let mimeType: string | undefined;
+
+    if (dto.type === ChatMessageType.TEXT) {
+      const text = dto.text?.trim();
+      if (!text) throw new BadRequestException('Message text is required');
+    } else {
+      if (!file) {
+        throw new BadRequestException('A file is required for this message type');
+      }
+      const saved = await this.chatMedia.save(file, dto.type);
+      mediaUrl = saved.url;
+      fileName = saved.fileName;
+      mimeType = saved.mimeType;
+    }
+
+    const message = await this.prisma.coachConversationMessage.create({
+      data: {
+        conversationId,
+        type: dto.type,
+        text: dto.text?.trim() || undefined,
+        mediaUrl,
+        fileName,
+        mimeType,
+        durationSec: dto.durationSec,
+        ...(isCoach
+          ? { senderCoachId: String(auth.userId) }
+          : { senderUserId: Number(auth.userId) }),
+      },
+      include: {
+        senderUser: {
+          select: { id: true, fullName: true, profileImage: true },
+        },
+        senderCoach: {
+          select: { id: true, firstName: true, lastName: true, profileImage: true },
+        },
+      },
+    });
+
+    await this.prisma.coachConversation.update({
+      where: { id: conversationId },
+      data: { updatedAt: new Date() },
+    });
+
+    return message;
+  }
+
+  private assertConversationAccess(
+    conversation: { coachId: string; userId: number },
+    auth: { role?: string; userId: string | number },
+  ) {
+    if (auth.role === Roles.COACH) {
+      if (conversation.coachId !== String(auth.userId)) {
+        throw new ForbiddenException('Not your conversation');
+      }
+      return;
+    }
+    if (auth.role === Roles.USER) {
+      if (conversation.userId !== Number(auth.userId)) {
+        throw new ForbiddenException('Not your conversation');
+      }
+      return;
+    }
+    throw new ForbiddenException('Not allowed');
   }
 
   async removeBooking(bookingId: string, paddleOwnerId: number) {

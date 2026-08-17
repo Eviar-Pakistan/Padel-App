@@ -110,6 +110,11 @@ export class UsersService {
         cnicNumber: dto.cnicNumber?.trim(),
         handedness: dto.handedness?.trim() || undefined,
         location: dto.location?.trim() || undefined,
+        province:
+          dto.province !== undefined
+            ? dto.province.trim() || null
+            : undefined,
+        isProfilePublic: dto.isProfilePublic,
       },
     });
 
@@ -156,6 +161,8 @@ export class UsersService {
       handedness: true,
       skillLevel: true,
       location: true,
+      province: true,
+      isProfilePublic: true,
       rank: true,
       points: true,
       wins: true,

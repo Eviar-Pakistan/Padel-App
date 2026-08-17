@@ -11,6 +11,7 @@ import {
   FaShoppingBag,
   FaShoppingCart,
   FaSignOutAlt,
+  FaStar,
   FaTimes,
   FaTrophy,
   FaUser,
@@ -29,6 +30,7 @@ const panelLinks = [
   { id: "shop", label: "Shop", icon: FaShoppingBag, path: "/shop" },
   { id: "cart", label: "Cart", icon: FaShoppingCart, path: "/cart" },
   { id: "chat", label: "Chat", icon: FaComments, path: "/chat" },
+  { id: "players", label: "Top Players", icon: FaStar, path: "/players" },
   { id: "profile", label: "Profile", icon: FaUser, path: "/profile" },
   { id: "info", label: "Padel Info", icon: FaInfoCircle, path: "/info" },
 ];

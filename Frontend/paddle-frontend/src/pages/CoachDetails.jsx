@@ -246,7 +246,7 @@ export default function CoachDetails() {
         bookingDate: selectedDate,
         startTime: selectedTime,
       });
-      setMessage("Session booked.");
+      setMessage("Session request sent. Waiting for coach approval.");
       navigate("/bookings");
     } catch (err) {
       const msg = err.response?.data?.message;

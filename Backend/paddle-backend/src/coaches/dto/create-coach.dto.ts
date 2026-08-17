@@ -10,6 +10,7 @@ import {
   IsString,
   Matches,
   Min,
+  MinLength,
 } from 'class-validator';
 import {
   Gender,
@@ -69,6 +70,10 @@ export class CreateCoachDto {
 
   @IsString()
   phoneNumber!: string;
+
+  @IsString()
+  @MinLength(4)
+  password!: string;
 
   @IsOptional()
   @IsEnum(Gender)

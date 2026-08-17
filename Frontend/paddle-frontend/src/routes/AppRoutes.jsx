@@ -7,11 +7,14 @@ import Register from "../pages/Register";
 import ProtectedRoute from "./ProtectedRoute";
 import AdminProtectedRoute from "./AdminProtectedRoute";
 import OwnerProtectedRoute from "./OwnerProtectedRoute";
+import CoachProtectedRoute from "./CoachProtectedRoute";
 import AdminLogin from "../pages/admin/AdminLogin";
 import AdminDashboard from "../pages/admin/AdminDashboard";
 import OwnerLogin from "../pages/owner/OwnerLogin";
 import OwnerDashboard from "../pages/owner/OwnerDashboard";
 import OwnerProductDetails from "../pages/owner/OwnerProductDetails";
+import CoachLogin from "../pages/coach/CoachLogin";
+import CoachDashboard from "../pages/coach/CoachDashboard";
 import NewsFeed from "../pages/NewsFeed";
 import Profile from "../pages/Profile";
 import Shop from "../pages/Shop";
@@ -24,6 +27,7 @@ import Notifications from "../pages/Notifications";
 import Coaches from "../pages/Coaches";
 import CoachDetails from "../pages/CoachDetails";
 import Chat from "../pages/Chat";
+import TopPlayers from "../pages/TopPlayers";
 
 export default function AppRoutes() {
   return (
@@ -137,6 +141,14 @@ export default function AppRoutes() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/players"
+              element={
+                <ProtectedRoute>
+                  <TopPlayers />
+                </ProtectedRoute>
+              }
+            />
 
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route
@@ -163,6 +175,16 @@ export default function AppRoutes() {
                 <OwnerProtectedRoute>
                   <OwnerProductDetails />
                 </OwnerProtectedRoute>
+              }
+            />
+
+            <Route path="/coach/login" element={<CoachLogin />} />
+            <Route
+              path="/coach"
+              element={
+                <CoachProtectedRoute>
+                  <CoachDashboard />
+                </CoachProtectedRoute>
               }
             />
           </Routes>

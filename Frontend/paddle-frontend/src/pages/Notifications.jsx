@@ -9,6 +9,7 @@ import {
   markNotificationRead,
 } from "../api/notifications";
 import { acceptJoinRequest } from "../api/courts";
+import { acceptChallenge } from "../api/challenges";
 import { notifyNotificationsChanged } from "../context/NotificationsContext";
 
 const SWIPE_THRESHOLD = 80;
@@ -32,6 +33,7 @@ function notificationMeta(item) {
 }
 
 function SwipeNotificationRow({ item, onMarkedRead, onAccepted }) {
+  const navigate = useNavigate();
   const startX = useRef(0);
   const dragging = useRef(false);
   const [offset, setOffset] = useState(0);
@@ -40,10 +42,18 @@ function SwipeNotificationRow({ item, onMarkedRead, onAccepted }) {
   const [actionError, setActionError] = useState("");
 
   const meta = notificationMeta(item);
-  const canAccept =
+  const canAcceptJoin =
     meta?.action === "ACCEPT_JOIN" &&
     meta?.joinRequestId &&
     !meta?.resolved;
+  const canAcceptChallenge =
+    meta?.action === "ACCEPT_CHALLENGE" &&
+    meta?.challengeId &&
+    !meta?.resolved;
+  const canOpenChallengeChat =
+    meta?.action === "OPEN_CHALLENGE_CHAT" && meta?.conversationId;
+  const canViewChallenges = canAcceptChallenge;
+  const canAccept = canAcceptJoin || canAcceptChallenge;
 
   const reset = () => setOffset(0);
 
@@ -72,8 +82,13 @@ function SwipeNotificationRow({ item, onMarkedRead, onAccepted }) {
     setAccepting(true);
     setActionError("");
     try {
-      await acceptJoinRequest(meta.joinRequestId);
-      onAccepted?.(item.id, meta.joinRequestId);
+      if (canAcceptJoin) {
+        await acceptJoinRequest(meta.joinRequestId);
+        onAccepted?.(item.id, { kind: "join", joinRequestId: meta.joinRequestId });
+      } else if (canAcceptChallenge) {
+        await acceptChallenge(meta.challengeId);
+        onAccepted?.(item.id, { kind: "challenge", challengeId: meta.challengeId });
+      }
       notifyNotificationsChanged();
       if (!item.isRead) {
         await markNotificationRead(item.id);
@@ -86,6 +101,26 @@ function SwipeNotificationRow({ item, onMarkedRead, onAccepted }) {
       );
     } finally {
       setAccepting(false);
+    }
+  };
+
+  const onView = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!item.isRead) {
+      markNotificationRead(item.id)
+        .then(() => {
+          onMarkedRead(item.id);
+          notifyNotificationsChanged();
+        })
+        .catch(() => {});
+    }
+    if (canOpenChallengeChat) {
+      navigate(`/chat?dm=${meta.conversationId}`);
+      return;
+    }
+    if (canViewChallenges) {
+      navigate("/players?tab=challenges");
     }
   };
 
@@ -161,22 +196,34 @@ function SwipeNotificationRow({ item, onMarkedRead, onAccepted }) {
           )}
         </div>
         <p className="mt-1 text-sm text-white/90">{item.message}</p>
-        {canAccept && (
-          <div data-no-swipe className="mt-3">
-            <button
-              type="button"
-              disabled={accepting}
-              onClick={onAccept}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="rounded-xl bg-[var(--color-primary)] px-4 py-2 text-xs font-bold text-[var(--color-background)] disabled:opacity-50"
-            >
-              {accepting ? "Accepting..." : "Accept"}
-            </button>
+        {canAccept || canOpenChallengeChat ? (
+          <div data-no-swipe className="mt-3 flex flex-wrap gap-2">
+            {(canViewChallenges || canOpenChallengeChat) && (
+              <button
+                type="button"
+                onClick={onView}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="rounded-xl border border-white/15 px-4 py-2 text-xs font-bold text-white hover:bg-white/5"
+              >
+                {canOpenChallengeChat ? "Chat" : "View"}
+              </button>
+            )}
+            {canAccept && (
+              <button
+                type="button"
+                disabled={accepting}
+                onClick={onAccept}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="rounded-xl bg-[var(--color-primary)] px-4 py-2 text-xs font-bold text-[var(--color-background)] disabled:opacity-50"
+              >
+                {accepting ? "Accepting..." : "Accept"}
+              </button>
+            )}
             {actionError && (
-              <p className="mt-1.5 text-xs text-red-400">{actionError}</p>
+              <p className="w-full text-xs text-red-400">{actionError}</p>
             )}
           </div>
-        )}
+        ) : null}
         <p className="mt-2 text-[11px] text-white/40">
           {formatWhen(item.createdAt)}
           {!item.isRead && !canAccept && (
@@ -230,7 +277,7 @@ export default function Notifications() {
         if (n.id !== notificationId) return n;
         const meta =
           n.meta && typeof n.meta === "object"
-            ? { ...n.meta, action: "JOIN_ACCEPTED", resolved: true }
+            ? { ...n.meta, resolved: true }
             : n.meta;
         return { ...n, isRead: true, meta };
       })

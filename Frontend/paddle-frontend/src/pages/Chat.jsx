@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { FaComments, FaUsers } from "react-icons/fa";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { FaComments, FaUser, FaUserTie, FaUsers } from "react-icons/fa";
 import TopNav from "../components/TopNav";
 import BottomNav from "../components/BottomNav";
 import ChatThread from "../components/ChatThread";
@@ -10,6 +10,16 @@ import {
   requestJoinChatGroup,
   sendChatMessage,
 } from "../api/chat";
+import {
+  getCoachDmMessages,
+  getMyCoachConversations,
+  sendCoachDmMessage,
+} from "../api/coaches";
+import {
+  getPlayerConversations,
+  getPlayerDmMessages,
+  sendPlayerDmMessage,
+} from "../api/challenges";
 
 function mediaUrl(path) {
   if (!path) return null;
@@ -42,20 +52,31 @@ function idFromJwt(key) {
 
 export default function Chat() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [tab, setTab] = useState("chats");
   const [groups, setGroups] = useState([]);
+  const [coachChats, setCoachChats] = useState([]);
+  const [playerChats, setPlayerChats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeId, setActiveId] = useState("");
+  const [activeKind, setActiveKind] = useState("group");
   const [messages, setMessages] = useState([]);
   const [sending, setSending] = useState(false);
   const [joiningId, setJoiningId] = useState("");
   const meId = idFromJwt("accessToken");
+  const dmId = searchParams.get("dm");
 
   const loadGroups = useCallback(async () => {
     try {
-      const { data } = await getChatGroups();
-      setGroups(Array.isArray(data) ? data : []);
+      const [groupsRes, coachRes, playerRes] = await Promise.all([
+        getChatGroups(),
+        getMyCoachConversations().catch(() => ({ data: [] })),
+        getPlayerConversations().catch(() => ({ data: [] })),
+      ]);
+      setGroups(Array.isArray(groupsRes.data) ? groupsRes.data : []);
+      setCoachChats(Array.isArray(coachRes.data) ? coachRes.data : []);
+      setPlayerChats(Array.isArray(playerRes.data) ? playerRes.data : []);
     } catch (err) {
       const msg = err.response?.data?.message;
       setError(Array.isArray(msg) ? msg.join(", ") : msg || "Failed to load chats.");
@@ -68,35 +89,57 @@ export default function Chat() {
     loadGroups();
   }, [loadGroups]);
 
-  const active = groups.find((g) => g.id === activeId);
+  useEffect(() => {
+    if (!dmId || loading) return;
+    const found = playerChats.find((c) => c.id === dmId);
+    if (found) {
+      setActiveKind("player");
+      setActiveId(dmId);
+    }
+  }, [dmId, playerChats, loading]);
+
+  const active =
+    activeKind === "coach"
+      ? coachChats.find((c) => c.id === activeId)
+      : activeKind === "player"
+        ? playerChats.find((c) => c.id === activeId)
+        : groups.find((g) => g.id === activeId);
   const myGroups = groups.filter((g) => g.isMember);
   const discover = groups.filter((g) => !g.isMember);
 
-  const loadMessages = useCallback(async (groupId, after) => {
-    const { data } = await getChatMessages(groupId, after);
-    const list = Array.isArray(data) ? data : [];
-    if (after) {
-      setMessages((prev) => {
-        const seen = new Set(prev.map((m) => m.id));
-        return [...prev, ...list.filter((m) => !seen.has(m.id))];
-      });
-    } else {
-      setMessages(list);
-    }
-  }, []);
+  const loadMessages = useCallback(
+    async (id, after, kind = "group") => {
+      const { data } =
+        kind === "coach"
+          ? await getCoachDmMessages(id, after)
+          : kind === "player"
+            ? await getPlayerDmMessages(id, after)
+            : await getChatMessages(id, after);
+      const list = Array.isArray(data) ? data : [];
+      if (after) {
+        setMessages((prev) => {
+          const seen = new Set(prev.map((m) => m.id));
+          return [...prev, ...list.filter((m) => !seen.has(m.id))];
+        });
+      } else {
+        setMessages(list);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (!activeId) return undefined;
-    loadMessages(activeId);
+    loadMessages(activeId, undefined, activeKind);
     const t = setInterval(() => {
       setMessages((prev) => {
         const last = prev[prev.length - 1];
-        loadMessages(activeId, last?.id);
+        loadMessages(activeId, last?.id, activeKind);
         return prev;
       });
     }, 3000);
     return () => clearInterval(t);
-  }, [activeId, loadMessages]);
+  }, [activeId, activeKind, loadMessages]);
 
   const onSend = async ({ type, text, file, durationSec }) => {
     if (!activeId) return;
@@ -107,7 +150,12 @@ export default function Chat() {
       if (text) fd.append("text", text);
       if (file) fd.append("file", file);
       if (durationSec) fd.append("durationSec", String(durationSec));
-      const { data } = await sendChatMessage(activeId, fd);
+      const { data } =
+        activeKind === "coach"
+          ? await sendCoachDmMessage(activeId, fd)
+          : activeKind === "player"
+            ? await sendPlayerDmMessage(activeId, fd)
+            : await sendChatMessage(activeId, fd);
       setMessages((prev) => [...prev, data]);
     } catch (err) {
       const msg = err.response?.data?.message;
@@ -131,17 +179,55 @@ export default function Chat() {
     }
   };
 
+  const threadMessages =
+    activeKind === "coach"
+      ? messages.map((m) => ({
+          ...m,
+          senderOwnerId: m.senderCoachId,
+          senderOwner: m.senderCoach
+            ? {
+                organizationName: `Coach ${m.senderCoach.firstName} ${m.senderCoach.lastName}`.trim(),
+              }
+            : null,
+        }))
+      : messages;
+
+  const showThread =
+    active &&
+    (activeKind === "coach" ||
+      activeKind === "player" ||
+      (activeKind === "group" && active.isMember));
+
   return (
     <div className="h-dvh overflow-hidden bg-[var(--color-background)]">
       <TopNav />
       <main className="mx-auto flex h-dvh w-full max-w-md flex-col pt-16">
-        {active && active.isMember ? (
+        {showThread ? (
           <div className="flex min-h-0 flex-1 flex-col">
             <ChatThread
-              group={active}
-              messages={messages}
+              group={
+                activeKind === "coach"
+                  ? {
+                      name: active.coach
+                        ? `Coach ${active.coach.firstName} ${active.coach.lastName}`.trim()
+                        : "Coach",
+                      image: active.coach?.profileImage,
+                      _count: { members: 2 },
+                    }
+                  : activeKind === "player"
+                    ? {
+                        name: active.otherUser?.fullName || "Player",
+                        image: active.otherUser?.profileImage,
+                        _count: { members: 2 },
+                      }
+                    : active
+              }
+              messages={threadMessages}
               me={{ kind: "user", id: meId }}
-              onBack={() => setActiveId("")}
+              onBack={() => {
+                setActiveId("");
+                setActiveKind("group");
+              }}
               onSend={onSend}
               sending={sending}
             />
@@ -151,7 +237,7 @@ export default function Chat() {
             <h1 className="text-lg font-bold text-white">Chats</h1>
             <div className="mt-3 flex gap-2">
               {[
-                { id: "chats", label: "My groups" },
+                { id: "chats", label: "My chats" },
                 { id: "discover", label: "Discover" },
               ].map((t) => (
                 <button
@@ -174,17 +260,93 @@ export default function Chat() {
             {loading ? (
               <p className="mt-6 text-sm text-white/40">Loading chats...</p>
             ) : tab === "chats" ? (
-              myGroups.length === 0 ? (
+              myGroups.length === 0 &&
+              coachChats.length === 0 &&
+              playerChats.length === 0 ? (
                 <p className="mt-6 text-sm text-white/40">
-                  You have not joined any groups yet. Open Discover to request access.
+                  No chats yet. Join a group, book a coach, or accept a player
+                  challenge.
                 </p>
               ) : (
                 <ul className="mt-4 divide-y divide-white/5">
+                  {playerChats.map((c) => (
+                    <li key={`player-${c.id}`}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveKind("player");
+                          setActiveId(c.id);
+                        }}
+                        className="flex w-full items-center gap-3 py-3 text-left border-b border-white/10"
+                      >
+                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full bg-[#1f2c34]">
+                          {c.otherUser?.profileImage ? (
+                            <img
+                              src={mediaUrl(c.otherUser.profileImage)}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center text-[var(--color-primary)]">
+                              <FaUser className="h-5 w-5" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-white">
+                            {c.otherUser?.fullName || "Player"}
+                          </p>
+                          <p className="truncate text-xs text-white/45">
+                            {lastPreview(c)}
+                          </p>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                  {coachChats.map((c) => (
+                    <li key={`coach-${c.id}`}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveKind("coach");
+                          setActiveId(c.id);
+                        }}
+                        className="flex w-full items-center gap-3 py-3 text-left border-b border-white/10"
+                      >
+                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full bg-[#1f2c34]">
+                          {c.coach?.profileImage ? (
+                            <img
+                              src={mediaUrl(c.coach.profileImage)}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center text-[var(--color-primary)]">
+                              <FaUserTie className="h-5 w-5" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-white">
+                            {c.coach
+                              ? `Coach ${c.coach.firstName} ${c.coach.lastName}`.trim()
+                              : "Coach"}
+                          </p>
+                          <p className="truncate text-xs text-white/45">
+                            {lastPreview(c)}
+                          </p>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
                   {myGroups.map((g) => (
                     <li key={g.id}>
                       <button
                         type="button"
-                        onClick={() => setActiveId(g.id)}
+                        onClick={() => {
+                          setActiveKind("group");
+                          setActiveId(g.id);
+                        }}
                         className="flex w-full items-center gap-3 py-3 text-left border-b border-white/10"
                       >
                         <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full bg-[#1f2c34]">
@@ -274,7 +436,7 @@ export default function Chat() {
           </div>
         )}
       </main>
-      {!active && (
+      {!showThread && (
         <BottomNav
           onChange={(id) => {
             if (id === "home") navigate("/");

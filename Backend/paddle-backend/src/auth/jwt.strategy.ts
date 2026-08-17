@@ -13,9 +13,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: {
-    sub: number;
+    sub: number | string;
     mobile?: string;
     username?: string;
+    email?: string;
     role?: string;
     isAdmin?: boolean;
   }) {
@@ -24,6 +25,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       userId: payload.sub,
       mobile: payload.mobile,
       username: payload.username,
+      email: payload.email,
       role: payload.role,
       isAdmin: payload.isAdmin,
     };

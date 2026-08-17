@@ -1,3 +1,14 @@
+/** Provinces / territories of Pakistan */
+export const PAKISTAN_PROVINCES = [
+  "Punjab",
+  "Sindh",
+  "Khyber Pakhtunkhwa",
+  "Balochistan",
+  "Islamabad Capital Territory",
+  "Gilgit-Baltistan",
+  "Azad Jammu and Kashmir",
+];
+
 /** Major cities of Pakistan for location selects */
 export const PAKISTAN_CITIES = [
   "Abbottabad",

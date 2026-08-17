@@ -13,6 +13,7 @@ import { CourtsModule } from './courts/courts.module';
 import { NewsModule } from './news/news.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ChatModule } from './chat/chat.module';
+import { ChallengesModule } from './challenges/challenges.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { ChatModule } from './chat/chat.module';
     NewsModule,
     NotificationsModule,
     ChatModule,
+    ChallengesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

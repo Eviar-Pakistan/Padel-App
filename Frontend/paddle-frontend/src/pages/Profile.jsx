@@ -19,7 +19,10 @@ import {
   updateMyAvatar,
   updateMyProfile,
 } from "../api/auth";
-import { PAKISTAN_CITIES } from "../constants/pakistanCities";
+import {
+  PAKISTAN_CITIES,
+  PAKISTAN_PROVINCES,
+} from "../constants/pakistanCities";
 
 function mediaUrl(path) {
   if (!path) return null;
@@ -37,6 +40,8 @@ const emptyPersonal = {
   cnicNumber: "",
   handedness: "",
   location: "",
+  province: "",
+  isProfilePublic: false,
 };
 
 export default function Profile() {
@@ -70,6 +75,8 @@ export default function Profile() {
         cnicNumber: data.cnicNumber || "",
         handedness: data.handedness || "",
         location: data.location || "",
+        province: data.province || "",
+        isProfilePublic: Boolean(data.isProfilePublic),
       });
     } catch (err) {
       const msg = err.response?.data?.message;
@@ -93,6 +100,8 @@ export default function Profile() {
       cnicNumber: data.cnicNumber || "",
       handedness: data.handedness || "",
       location: data.location || "",
+      province: data.province || "",
+      isProfilePublic: Boolean(data.isProfilePublic),
     });
   };
 
@@ -108,6 +117,8 @@ export default function Profile() {
         cnicNumber: personal.cnicNumber.trim(),
         handedness: personal.handedness || undefined,
         location: personal.location || undefined,
+        province: personal.province || "",
+        isProfilePublic: Boolean(personal.isProfilePublic),
       });
       applyProfile(data);
       setMessage("Personal details saved.");
@@ -348,12 +359,54 @@ export default function Profile() {
                 }
               />
               <CustomSelect
+                label="Province"
+                value={personal.province}
+                onChange={(v) => setPersonal((p) => ({ ...p, province: v }))}
+                placeholder="None"
+                options={
+                  !PAKISTAN_PROVINCES.includes(personal.province) &&
+                  personal.province
+                    ? [personal.province, ...PAKISTAN_PROVINCES]
+                    : PAKISTAN_PROVINCES
+                }
+              />
+              <CustomSelect
                 label="Handedness"
                 value={personal.handedness}
                 onChange={(v) => setPersonal((p) => ({ ...p, handedness: v }))}
                 placeholder="Select"
                 options={HAND_OPTIONS}
               />
+              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#0e1821] px-3 py-3">
+                <div>
+                  <p className="text-xs text-white/45">Public profile</p>
+                  <p className="mt-0.5 text-sm text-white/70">
+                    Allow others to view your profile
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={personal.isProfilePublic}
+                  onClick={() =>
+                    setPersonal((p) => ({
+                      ...p,
+                      isProfilePublic: !p.isProfilePublic,
+                    }))
+                  }
+                  className={`relative h-7 w-12 shrink-0 rounded-full transition ${
+                    personal.isProfilePublic
+                      ? "bg-[var(--color-primary)]"
+                      : "bg-white/15"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition ${
+                      personal.isProfilePublic ? "left-[1.35rem]" : "left-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
               <button
                 type="submit"
                 disabled={savingPersonal}

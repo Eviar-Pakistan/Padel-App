@@ -27,8 +27,8 @@ function formatTime(iso) {
 }
 
 function isMine(msg, me) {
-  if (me.kind === "owner") return msg.senderOwnerId === me.id;
-  return msg.senderUserId === me.id;
+  if (me.kind === "owner") return String(msg.senderOwnerId) === String(me.id);
+  return Number(msg.senderUserId) === Number(me.id);
 }
 
 function senderName(msg) {

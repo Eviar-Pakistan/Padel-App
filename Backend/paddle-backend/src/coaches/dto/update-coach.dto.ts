@@ -10,6 +10,7 @@ import {
   IsString,
   Matches,
   Min,
+  MinLength,
 } from 'class-validator';
 import {
   Gender,
@@ -74,6 +75,11 @@ export class UpdateCoachDto {
   @IsOptional()
   @IsString()
   phoneNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(4)
+  password?: string;
 
   @IsOptional()
   @IsEnum(Gender)

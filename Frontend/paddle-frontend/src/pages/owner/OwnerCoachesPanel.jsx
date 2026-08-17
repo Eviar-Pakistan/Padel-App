@@ -56,6 +56,7 @@ const emptyForm = {
   lastName: "",
   email: "",
   phoneNumber: "",
+  password: "",
   gender: "",
   bio: "",
   yearsOfExperience: "",
@@ -205,6 +206,7 @@ export default function OwnerCoachesPanel() {
       lastName: coach.lastName || "",
       email: coach.email || "",
       phoneNumber: coach.phoneNumber || "",
+      password: "",
       gender: coach.gender || "",
       bio: coach.bio || "",
       yearsOfExperience:
@@ -267,6 +269,11 @@ export default function OwnerCoachesPanel() {
       formData.append("lastName", form.lastName.trim());
       formData.append("email", form.email.trim());
       formData.append("phoneNumber", form.phoneNumber.trim());
+      if (form.password.trim()) {
+        formData.append("password", form.password.trim());
+      } else if (!editingId) {
+        throw new Error("Login password is required for new coaches.");
+      }
       formData.append("isVerified", String(form.isVerified));
       formData.append("status", form.status);
       if (form.gender) formData.append("gender", form.gender);
@@ -319,7 +326,11 @@ export default function OwnerCoachesPanel() {
       await load();
     } catch (err) {
       const msg = err.response?.data?.message;
-      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Save failed.");
+      setError(
+        Array.isArray(msg)
+          ? msg.join(", ")
+          : msg || err.message || "Save failed."
+      );
     } finally {
       setSaving(false);
     }
@@ -360,7 +371,7 @@ export default function OwnerCoachesPanel() {
           <SectionCard
             icon={FaUser}
             title="Personal Information"
-            subtitle="Basic details about the coach."
+            subtitle="Basic details and coach portal login."
           >
             <div className="grid gap-3 sm:grid-cols-2">
               <Field
@@ -392,6 +403,18 @@ export default function OwnerCoachesPanel() {
                 placeholder="Enter phone number"
                 value={form.phoneNumber}
                 onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))}
+              />
+              <Field
+                label={editingId ? "Login password (optional)" : "Login password"}
+                type="password"
+                required={!editingId}
+                placeholder={
+                  editingId
+                    ? "Leave blank to keep current password"
+                    : "Set coach login password"
+                }
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
               />
               <CustomSelect
                 label="Gender (optional)"
