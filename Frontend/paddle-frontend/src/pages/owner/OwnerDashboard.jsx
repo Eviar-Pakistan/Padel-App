@@ -7,6 +7,7 @@ import {
   FaBuilding,
   FaCalendarAlt,
   FaUserTie,
+  FaClipboardCheck,
   FaBoxOpen,
   FaShoppingCart,
   FaSignOutAlt,
@@ -17,6 +18,7 @@ import OwnerOverviewPanel from "./OwnerOverviewPanel";
 import OwnerCourtsPanel from "./OwnerCourtsPanel";
 import OwnerBookingsPanel from "./OwnerBookingsPanel";
 import OwnerCoachesPanel from "./OwnerCoachesPanel";
+import OwnerRefereesPanel from "./OwnerRefereesPanel";
 import OwnerProductsPanel from "./OwnerProductsPanel";
 import OwnerOrdersPanel from "./OwnerOrdersPanel";
 import OwnerNewsPanel from "./OwnerNewsPanel";
@@ -29,6 +31,7 @@ const navItems = [
   { id: "news", label: "News", icon: FaNewspaper },
   { id: "chat", label: "Chat", icon: FaComments },
   { id: "coaches", label: "Coaches", icon: FaUserTie },
+  { id: "referees", label: "Referees", icon: FaClipboardCheck },
   { id: "products", label: "Products", icon: FaBoxOpen },
   { id: "orders", label: "Orders", icon: FaShoppingCart },
 ];
@@ -164,6 +167,7 @@ export default function OwnerDashboard() {
           {activeTab === "news" && <OwnerNewsPanel />}
           {activeTab === "chat" && <OwnerChatPanel />}
           {activeTab === "coaches" && <OwnerCoachesPanel />}
+          {activeTab === "referees" && <OwnerRefereesPanel />}
           {activeTab === "products" && (
             <OwnerProductsPanel initialEditId={editProductId} />
           )}

@@ -10,6 +10,7 @@ import {
 } from "../api/notifications";
 import { acceptJoinRequest } from "../api/courts";
 import { acceptChallenge } from "../api/challenges";
+import { acceptMatchInvite, acceptMatchJoin } from "../api/matches";
 import { notifyNotificationsChanged } from "../context/NotificationsContext";
 
 const SWIPE_THRESHOLD = 80;
@@ -50,10 +51,21 @@ function SwipeNotificationRow({ item, onMarkedRead, onAccepted }) {
     meta?.action === "ACCEPT_CHALLENGE" &&
     meta?.challengeId &&
     !meta?.resolved;
+  const canAcceptMatch =
+    meta?.action === "ACCEPT_MATCH" &&
+    meta?.matchId &&
+    !meta?.resolved;
+  const canAcceptMatchJoin =
+    meta?.action === "ACCEPT_MATCH_JOIN" &&
+    meta?.joinRequestId &&
+    meta?.matchId &&
+    !meta?.resolved;
   const canOpenChallengeChat =
     meta?.action === "OPEN_CHALLENGE_CHAT" && meta?.conversationId;
   const canViewChallenges = canAcceptChallenge;
-  const canAccept = canAcceptJoin || canAcceptChallenge;
+  const canOpenMatch = meta?.action === "OPEN_MATCH" && meta?.matchId;
+  const canAccept =
+    canAcceptJoin || canAcceptChallenge || canAcceptMatch || canAcceptMatchJoin;
 
   const reset = () => setOffset(0);
 
@@ -88,6 +100,12 @@ function SwipeNotificationRow({ item, onMarkedRead, onAccepted }) {
       } else if (canAcceptChallenge) {
         await acceptChallenge(meta.challengeId);
         onAccepted?.(item.id, { kind: "challenge", challengeId: meta.challengeId });
+      } else if (canAcceptMatch) {
+        await acceptMatchInvite(meta.matchId);
+        onAccepted?.(item.id, { kind: "match", matchId: meta.matchId });
+      } else if (canAcceptMatchJoin) {
+        await acceptMatchJoin(meta.matchId, meta.joinRequestId);
+        onAccepted?.(item.id, { kind: "match-join", joinRequestId: meta.joinRequestId });
       }
       notifyNotificationsChanged();
       if (!item.isRead) {
@@ -117,6 +135,10 @@ function SwipeNotificationRow({ item, onMarkedRead, onAccepted }) {
     }
     if (canOpenChallengeChat) {
       navigate(`/chat?dm=${meta.conversationId}`);
+      return;
+    }
+    if (canOpenMatch || canAcceptMatch) {
+      navigate(`/matches/${meta.matchId}`);
       return;
     }
     if (canViewChallenges) {
@@ -196,9 +218,9 @@ function SwipeNotificationRow({ item, onMarkedRead, onAccepted }) {
           )}
         </div>
         <p className="mt-1 text-sm text-white/90">{item.message}</p>
-        {canAccept || canOpenChallengeChat ? (
+        {canAccept || canOpenChallengeChat || canOpenMatch ? (
           <div data-no-swipe className="mt-3 flex flex-wrap gap-2">
-            {(canViewChallenges || canOpenChallengeChat) && (
+            {(canViewChallenges || canOpenChallengeChat || canOpenMatch || canAcceptMatch) && (
               <button
                 type="button"
                 onClick={onView}

@@ -14,6 +14,8 @@ import { NewsModule } from './news/news.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ChatModule } from './chat/chat.module';
 import { ChallengesModule } from './challenges/challenges.module';
+import { RefereesModule } from './referees/referees.module';
+import { MatchesModule } from './matches/matches.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { ChallengesModule } from './challenges/challenges.module';
     NotificationsModule,
     ChatModule,
     ChallengesModule,
+    RefereesModule,
+    MatchesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

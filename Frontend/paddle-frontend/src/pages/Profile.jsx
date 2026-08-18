@@ -13,6 +13,7 @@ import {
 import TopNav from "../components/TopNav";
 import BottomNav from "../components/BottomNav";
 import CustomSelect from "../components/CustomSelect";
+import PasswordToggleButton from "../components/PasswordToggleButton";
 import {
   changeMyPassword,
   getMyProfile,
@@ -41,7 +42,7 @@ const emptyPersonal = {
   handedness: "",
   location: "",
   province: "",
-  isProfilePublic: false,
+  isProfilePublic: true,
 };
 
 export default function Profile() {
@@ -561,20 +562,31 @@ function Field({
   autoComplete,
   minLength,
 }) {
+  const [showPassword, setShowPassword] = useState(false);
+  const isPassword = type === "password";
   return (
     <label className="block">
       <span className="mb-1.5 block text-xs text-white/45">{label}</span>
-      <input
-        name={name}
-        type={type}
-        required={required}
-        minLength={minLength}
-        autoComplete={autoComplete}
-        min={type === "number" ? 0 : undefined}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
-      />
+      <div className="relative">
+        <input
+          name={name}
+          type={isPassword && showPassword ? "text" : type}
+          required={required}
+          minLength={minLength}
+          autoComplete={autoComplete}
+          min={type === "number" ? 0 : undefined}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full rounded-xl border border-white/10 bg-[#0e1821] py-2.5 pl-3 text-sm text-white outline-none"
+          style={{ paddingRight: isPassword ? "2.75rem" : "0.75rem" }}
+        />
+        {isPassword && (
+          <PasswordToggleButton
+            show={showPassword}
+            onClick={() => setShowPassword((s) => !s)}
+          />
+        )}
+      </div>
     </label>
   );
 }

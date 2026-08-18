@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { FaComments, FaUser, FaUserTie, FaUsers } from "react-icons/fa";
+import { FaComments, FaTrophy, FaUser, FaUserTie, FaUsers } from "react-icons/fa";
 import TopNav from "../components/TopNav";
 import BottomNav from "../components/BottomNav";
 import ChatThread from "../components/ChatThread";
@@ -20,6 +20,7 @@ import {
   getPlayerDmMessages,
   sendPlayerDmMessage,
 } from "../api/challenges";
+import { getMatchConversations, getMatchMessages, sendMatchMessage } from "../api/matches";
 
 function mediaUrl(path) {
   if (!path) return null;
@@ -57,6 +58,7 @@ export default function Chat() {
   const [groups, setGroups] = useState([]);
   const [coachChats, setCoachChats] = useState([]);
   const [playerChats, setPlayerChats] = useState([]);
+  const [matchChats, setMatchChats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeId, setActiveId] = useState("");
@@ -69,14 +71,16 @@ export default function Chat() {
 
   const loadGroups = useCallback(async () => {
     try {
-      const [groupsRes, coachRes, playerRes] = await Promise.all([
+      const [groupsRes, coachRes, playerRes, matchRes] = await Promise.all([
         getChatGroups(),
         getMyCoachConversations().catch(() => ({ data: [] })),
         getPlayerConversations().catch(() => ({ data: [] })),
+        getMatchConversations().catch(() => ({ data: [] })),
       ]);
       setGroups(Array.isArray(groupsRes.data) ? groupsRes.data : []);
       setCoachChats(Array.isArray(coachRes.data) ? coachRes.data : []);
       setPlayerChats(Array.isArray(playerRes.data) ? playerRes.data : []);
+      setMatchChats(Array.isArray(matchRes.data) ? matchRes.data : []);
     } catch (err) {
       const msg = err.response?.data?.message;
       setError(Array.isArray(msg) ? msg.join(", ") : msg || "Failed to load chats.");
@@ -103,7 +107,9 @@ export default function Chat() {
       ? coachChats.find((c) => c.id === activeId)
       : activeKind === "player"
         ? playerChats.find((c) => c.id === activeId)
-        : groups.find((g) => g.id === activeId);
+        : activeKind === "match"
+          ? matchChats.find((c) => c.id === activeId)
+          : groups.find((g) => g.id === activeId);
   const myGroups = groups.filter((g) => g.isMember);
   const discover = groups.filter((g) => !g.isMember);
 
@@ -114,7 +120,9 @@ export default function Chat() {
           ? await getCoachDmMessages(id, after)
           : kind === "player"
             ? await getPlayerDmMessages(id, after)
-            : await getChatMessages(id, after);
+            : kind === "match"
+              ? await getMatchMessages(id, after)
+              : await getChatMessages(id, after);
       const list = Array.isArray(data) ? data : [];
       if (after) {
         setMessages((prev) => {
@@ -155,7 +163,9 @@ export default function Chat() {
           ? await sendCoachDmMessage(activeId, fd)
           : activeKind === "player"
             ? await sendPlayerDmMessage(activeId, fd)
-            : await sendChatMessage(activeId, fd);
+            : activeKind === "match"
+              ? await sendMatchMessage(activeId, fd)
+              : await sendChatMessage(activeId, fd);
       setMessages((prev) => [...prev, data]);
     } catch (err) {
       const msg = err.response?.data?.message;
@@ -196,6 +206,7 @@ export default function Chat() {
     active &&
     (activeKind === "coach" ||
       activeKind === "player" ||
+      activeKind === "match" ||
       (activeKind === "group" && active.isMember));
 
   return (
@@ -220,6 +231,11 @@ export default function Chat() {
                         image: active.otherUser?.profileImage,
                         _count: { members: 2 },
                       }
+                    : activeKind === "match"
+                      ? {
+                          name: active.title || active.court?.name || "Match",
+                          _count: { members: 4 },
+                        }
                     : active
               }
               messages={threadMessages}
@@ -262,13 +278,38 @@ export default function Chat() {
             ) : tab === "chats" ? (
               myGroups.length === 0 &&
               coachChats.length === 0 &&
-              playerChats.length === 0 ? (
+              playerChats.length === 0 &&
+              matchChats.length === 0 ? (
                 <p className="mt-6 text-sm text-white/40">
-                  No chats yet. Join a group, book a coach, or accept a player
+                  No chats yet. Join a group, start a match, book a coach, or accept a player
                   challenge.
                 </p>
               ) : (
                 <ul className="mt-4 divide-y divide-white/5">
+                  {matchChats.map((c) => (
+                    <li key={`match-${c.id}`}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveKind("match");
+                          setActiveId(c.id);
+                        }}
+                        className="flex w-full items-center gap-3 py-3 text-left border-b border-white/10"
+                      >
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#1f2c34] text-[var(--color-primary)]">
+                          <FaTrophy className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-white">
+                            {c.title || c.court?.name || "Match"}
+                          </p>
+                          <p className="truncate text-xs text-white/45">
+                            {lastPreview(c)}
+                          </p>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
                   {playerChats.map((c) => (
                     <li key={`player-${c.id}`}>
                       <button

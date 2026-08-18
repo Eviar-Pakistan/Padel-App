@@ -11,6 +11,7 @@ import {
 } from "react-icons/fa";
 import ChatThread from "../../components/ChatThread";
 import CustomSelect from "../../components/CustomSelect";
+import PasswordToggleButton from "../../components/PasswordToggleButton";
 import {
   acceptCoachBooking,
   getCoachConversationMessages,
@@ -133,6 +134,7 @@ export default function CoachDashboard() {
   const [actingId, setActingId] = useState("");
   const [sending, setSending] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [profileForm, setProfileForm] = useState({});
   const [imageFile, setImageFile] = useState(null);
   const meId = coachIdFromJwt();
@@ -702,14 +704,20 @@ export default function CoachDashboard() {
             </div>
             <label className="block text-sm text-white/70">
               New password (optional)
-              <input
-                type="password"
-                value={profileForm.password || ""}
-                onChange={(e) =>
-                  setProfileForm((f) => ({ ...f, password: e.target.value }))
-                }
-                className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
-              />
+              <div className="relative mt-1.5">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={profileForm.password || ""}
+                  onChange={(e) =>
+                    setProfileForm((f) => ({ ...f, password: e.target.value }))
+                  }
+                  className="w-full rounded-xl border border-white/10 bg-[#0e1821] py-2.5 pl-3 pr-11 text-sm text-white outline-none"
+                />
+                <PasswordToggleButton
+                  show={showPassword}
+                  onClick={() => setShowPassword((s) => !s)}
+                />
+              </div>
             </label>
             <button
               type="submit"

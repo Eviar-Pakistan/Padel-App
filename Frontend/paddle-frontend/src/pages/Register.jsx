@@ -4,6 +4,12 @@ import { FaUser, FaPhoneAlt, FaLock, FaCheck, FaIdCard } from "react-icons/fa";
 import AuthShell from "../components/AuthShell";
 import AuthInput from "../components/AuthInput";
 import { register } from "../api/auth";
+import {
+  formatCnic,
+  isCnicComplete,
+  sanitizeFullName,
+  sanitizePhone,
+} from "../utils/authFields";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -20,7 +26,11 @@ export default function Register() {
   const isPhoneValid = /^03\d{9}$/.test(form.phone.replace(/[\s-]/g, ""));
 
   const updateField = (field) => (e) => {
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+    let value = e.target.value;
+    if (field === "fullName") value = sanitizeFullName(value);
+    if (field === "cnic") value = formatCnic(value);
+    if (field === "phone") value = sanitizePhone(value);
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleNext = (e) => {
@@ -29,6 +39,11 @@ export default function Register() {
 
     if (!form.fullName.trim() || !form.cnic.trim()) {
       setError("Please fill in all personal info fields.");
+      return;
+    }
+
+    if (!isCnicComplete(form.cnic)) {
+      setError("Please enter a valid CNIC (XXXXX-XXXXXXX-X).");
       return;
     }
 
@@ -110,6 +125,8 @@ export default function Register() {
                 label="Full Name"
                 icon={FaUser}
                 type="text"
+                inputMode="text"
+                autoComplete="name"
                 placeholder="Enter your full name"
                 value={form.fullName}
                 onChange={updateField("fullName")}
@@ -119,7 +136,10 @@ export default function Register() {
               <AuthInput
                 label="CNIC Number"
                 icon={FaIdCard}
-                type="text"
+                type="tel"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={15}
                 placeholder="XXXXX-XXXXXXX-X"
                 hint="Example: 42101-1234567-1"
                 value={form.cnic}
@@ -149,6 +169,8 @@ export default function Register() {
                 rightIcon={isPhoneValid ? FaCheck : undefined}
                 type="tel"
                 inputMode="numeric"
+                autoComplete="tel"
+                maxLength={11}
                 placeholder="03XXXXXXXXX"
                 value={form.phone}
                 onChange={updateField("phone")}

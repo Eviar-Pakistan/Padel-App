@@ -5,6 +5,7 @@ import AuthShell from "../components/AuthShell";
 import AuthInput from "../components/AuthInput";
 import { login } from "../api/auth";
 import { notifyAuthChanged } from "../context/CartContext";
+import { sanitizePhone } from "../utils/authFields";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -68,9 +69,11 @@ export default function Login() {
               rightIcon={isPhoneValid ? FaCheck : undefined}
               type="tel"
               inputMode="numeric"
+              autoComplete="tel"
+              maxLength={11}
               placeholder="03XXXXXXXXX"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(sanitizePhone(e.target.value))}
               required
             />
 

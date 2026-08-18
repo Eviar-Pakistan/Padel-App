@@ -1,3 +1,6 @@
+import { useState } from "react";
+import PasswordToggleButton from "./PasswordToggleButton";
+
 export default function AuthInput({
   label,
   icon: Icon,
@@ -6,9 +9,13 @@ export default function AuthInput({
   rightIconAriaLabel,
   hint,
   className = "",
+  type = "text",
   ...props
 }) {
-  const hasRight = Boolean(RightIcon);
+  const [showPassword, setShowPassword] = useState(false);
+  const autoPasswordToggle = type === "password" && !RightIcon;
+  const inputType = autoPasswordToggle && showPassword ? "text" : type;
+  const hasRight = Boolean(RightIcon) || autoPasswordToggle;
 
   return (
     <div className={`w-full ${className}`}>
@@ -30,22 +37,27 @@ export default function AuthInput({
             paddingRight: hasRight ? "2.75rem" : "1rem",
           }}
           {...props}
+          type={inputType}
         />
-        {RightIcon &&
-          (onRightIconClick ? (
-            <button
-              type="button"
-              onClick={onRightIconClick}
-              aria-label={rightIconAriaLabel || "Toggle"}
-              className="absolute inset-y-0 right-2 flex items-center rounded-lg px-2 text-[var(--color-primary)] transition hover:bg-white/5"
-            >
-              <RightIcon className="h-4 w-4" />
-            </button>
-          ) : (
-            <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center">
-              <RightIcon className="h-4 w-4 text-[var(--color-primary)]" />
-            </span>
-          ))}
+        {autoPasswordToggle ? (
+          <PasswordToggleButton
+            show={showPassword}
+            onClick={() => setShowPassword((s) => !s)}
+          />
+        ) : RightIcon && onRightIconClick ? (
+          <button
+            type="button"
+            onClick={onRightIconClick}
+            aria-label={rightIconAriaLabel || "Toggle"}
+            className="absolute inset-y-0 right-2 flex items-center rounded-lg px-2 text-[var(--color-primary)] transition hover:bg-white/5"
+          >
+            <RightIcon className="h-4 w-4" />
+          </button>
+        ) : RightIcon ? (
+          <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center">
+            <RightIcon className="h-4 w-4 text-[var(--color-primary)]" />
+          </span>
+        ) : null}
       </div>
       {hint && (
         <p className="mt-2 text-xs text-[var(--color-muted)]">{hint}</p>

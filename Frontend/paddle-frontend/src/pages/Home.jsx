@@ -67,6 +67,11 @@ export default function Home() {
                 if (id === "coaches") navigate("/coaches");
                 if (id === "chat") navigate("/chat");
                 if (id === "players") navigate("/players");
+                if (id === "info") navigate("/info");
+                if (id === "matches") navigate("/matches");
+                if (id === "live") navigate("/live");
+                if (id === "results") navigate("/results");
+                if (id === "leaderboard") navigate("/players");
               }}
               className="relative flex aspect-square flex-col items-start justify-between rounded-[22px] bg-[#1c2430] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:bg-[#222b38]"
             >

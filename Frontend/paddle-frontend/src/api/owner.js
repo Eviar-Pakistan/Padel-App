@@ -39,6 +39,18 @@ export const updateCoachBookingStatus = (bookingId, data) =>
 export const deleteCoachBooking = (bookingId) =>
   ownerApi.delete(`coaches/bookings/${bookingId}`);
 
+// Referees
+export const getReferees = () => ownerApi.get("referees");
+export const createReferee = (formData) =>
+  ownerApi.post("referees", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+export const updateReferee = (id, formData) =>
+  ownerApi.patch(`referees/${id}`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+export const deleteReferee = (id) => ownerApi.delete(`referees/${id}`);
+
 // Products
 export const getMyProducts = () => ownerApi.get("products/mine");
 export const getProduct = (id) => ownerApi.get(`products/${id}`);

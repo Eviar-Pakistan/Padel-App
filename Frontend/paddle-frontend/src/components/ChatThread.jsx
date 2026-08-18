@@ -28,18 +28,90 @@ function formatTime(iso) {
 
 function isMine(msg, me) {
   if (me.kind === "owner") return String(msg.senderOwnerId) === String(me.id);
+  if (me.kind === "referee") return String(msg.senderRefereeId) === String(me.id);
   return Number(msg.senderUserId) === Number(me.id);
 }
 
 function senderName(msg) {
   if (msg.senderOwner) return msg.senderOwner.organizationName || "Club";
+  if (msg.senderReferee) return msg.senderReferee.fullName || "Referee";
   return msg.senderUser?.fullName || "Member";
+}
+
+function formatVoiceDuration(sec) {
+  const n = Math.max(0, Math.round(Number(sec) || 0));
+  if (n < 60) return `${n}"`;
+  const m = Math.floor(n / 60);
+  const s = String(n % 60).padStart(2, "0");
+  return `${m}:${s}`;
 }
 
 function VoicePlayer({ src, durationSec }) {
   const audioRef = useRef(null);
+  const trackRef = useRef(null);
+  const dragging = useRef(false);
   const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const [duration, setDuration] = useState(Number(durationSec) || 0);
   const url = mediaUrl(src);
+
+  const total = () => {
+    const el = audioRef.current;
+    if (el?.duration && Number.isFinite(el.duration) && el.duration > 0) {
+      return el.duration;
+    }
+    return duration || 1;
+  };
+
+  const applyRatio = (ratio) => {
+    const el = audioRef.current;
+    const next = Math.min(1, Math.max(0, ratio));
+    setProgress(next);
+    setElapsed(next * total());
+    if (el) el.currentTime = next * total();
+  };
+
+  const ratioFromEvent = (clientX) => {
+    const track = trackRef.current;
+    if (!track) return 0;
+    const rect = track.getBoundingClientRect();
+    if (rect.width <= 0) return 0;
+    return (clientX - rect.left) / rect.width;
+  };
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return undefined;
+
+    const onTime = () => {
+      if (dragging.current) return;
+      const d = total();
+      setElapsed(el.currentTime);
+      setProgress(d > 0 ? el.currentTime / d : 0);
+    };
+    const onMeta = () => {
+      if (el.duration && Number.isFinite(el.duration)) {
+        setDuration(el.duration);
+      }
+    };
+    const onEnded = () => {
+      setPlaying(false);
+      setProgress(0);
+      setElapsed(0);
+    };
+
+    el.addEventListener("timeupdate", onTime);
+    el.addEventListener("loadedmetadata", onMeta);
+    el.addEventListener("durationchange", onMeta);
+    el.addEventListener("ended", onEnded);
+    return () => {
+      el.removeEventListener("timeupdate", onTime);
+      el.removeEventListener("loadedmetadata", onMeta);
+      el.removeEventListener("durationchange", onMeta);
+      el.removeEventListener("ended", onEnded);
+    };
+  }, [url, duration]);
 
   const toggle = () => {
     const el = audioRef.current;
@@ -47,33 +119,73 @@ function VoicePlayer({ src, durationSec }) {
     if (playing) {
       el.pause();
       setPlaying(false);
-    } else {
-      el.play();
-      setPlaying(true);
+      return;
     }
+    el.play();
+    setPlaying(true);
   };
 
+  const onPointerDown = (e) => {
+    dragging.current = true;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    applyRatio(ratioFromEvent(e.clientX));
+  };
+
+  const onPointerMove = (e) => {
+    if (!dragging.current) return;
+    applyRatio(ratioFromEvent(e.clientX));
+  };
+
+  const onPointerUp = () => {
+    dragging.current = false;
+  };
+
+  const shown = playing || elapsed > 0 ? elapsed : duration;
+
   return (
-    <div className="flex min-w-[160px] items-center gap-2">
+    <div className="flex w-[210px] max-w-full shrink-0 items-center gap-2.5">
       <button
         type="button"
         onClick={toggle}
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15"
+        aria-label={playing ? "Pause voice message" : "Play voice message"}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20 text-white"
       >
-        {playing ? <FaPause className="h-3 w-3" /> : <FaPlay className="h-3 w-3" />}
+        {playing ? (
+          <FaPause className="h-3 w-3" />
+        ) : (
+          <FaPlay className="ml-0.5 h-3 w-3" />
+        )}
       </button>
-      <div className="h-1 flex-1 rounded-full bg-white/25">
-        <div className="h-1 w-1/3 rounded-full bg-white/80" />
+      <div className="min-w-0 flex-1">
+        <div
+          ref={trackRef}
+          role="slider"
+          tabIndex={0}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress * 100)}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          className="relative flex h-6 cursor-pointer items-center"
+        >
+          <div className="h-[2px] w-full rounded-full bg-white/25">
+            <div
+              className="h-[2px] rounded-full bg-white/90"
+              style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
+            />
+          </div>
+          <span
+            className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow"
+            style={{ left: `${Math.min(100, Math.max(0, progress * 100))}%` }}
+          />
+        </div>
       </div>
-      <span className="text-[10px] text-white/70">
-        {durationSec ? `${durationSec}"` : "voice"}
+      <span className="w-7 shrink-0 text-right text-[11px] tabular-nums text-white/75">
+        {formatVoiceDuration(shown)}
       </span>
-      <audio
-        ref={audioRef}
-        src={url}
-        onEnded={() => setPlaying(false)}
-        className="hidden"
-      />
+      <audio ref={audioRef} src={url} preload="metadata" className="hidden" />
     </div>
   );
 }
@@ -87,7 +199,7 @@ function Bubble({ msg, mine }) {
           mine
             ? "rounded-br-none bg-[#005c4b] text-white"
             : "rounded-bl-none bg-[#1f2c34] text-white"
-        }`}
+        } ${msg.type === "AUDIO" ? "min-w-[240px]" : ""}`}
       >
         {!mine && (
           <p className="mb-0.5 text-[11px] font-semibold text-[#53bdeb]">
@@ -109,9 +221,7 @@ function Bubble({ msg, mine }) {
           />
         )}
         {msg.type === "AUDIO" && url && (
-          <div className="mb-1">
-            <VoicePlayer src={msg.mediaUrl} durationSec={msg.durationSec} />
-          </div>
+          <VoicePlayer src={msg.mediaUrl} durationSec={msg.durationSec} />
         )}
         {msg.type === "FILE" && url && (
           <a

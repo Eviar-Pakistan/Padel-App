@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaUserShield, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
+import { FaUserShield, FaLock } from "react-icons/fa";
 import AuthInput from "../../components/AuthInput";
 import { adminLogin } from "../../api/admin";
 
@@ -8,7 +8,6 @@ export default function AdminLogin() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -77,17 +76,12 @@ export default function AdminLogin() {
             <AuthInput
               label="Password"
               icon={FaLock}
-              type={showPassword ? "text" : "password"}
+              type="password"
               placeholder="Enter password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               autoComplete="current-password"
-              rightIcon={showPassword ? FaEyeSlash : FaEye}
-              rightIconAriaLabel={
-                showPassword ? "Hide password" : "Show password"
-              }
-              onRightIconClick={() => setShowPassword((prev) => !prev)}
             />
 
             {error && (

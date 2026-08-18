@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaBuilding, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
+import { FaBuilding, FaLock } from "react-icons/fa";
 import AuthInput from "../../components/AuthInput";
 import { ownerLogin } from "../../api/owner";
 
@@ -8,7 +8,6 @@ export default function OwnerLogin() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -72,15 +71,12 @@ export default function OwnerLogin() {
             <AuthInput
               label="Password"
               icon={FaLock}
-              type={showPassword ? "text" : "password"}
+              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter password"
               required
               autoComplete="current-password"
-              rightIcon={showPassword ? FaEyeSlash : FaEye}
-              rightIconAriaLabel={showPassword ? "Hide password" : "Show password"}
-              onRightIconClick={() => setShowPassword((p) => !p)}
             />
             {error && (
               <p className="rounded-xl bg-red-500/10 px-3 py-2 text-center text-sm text-red-400">

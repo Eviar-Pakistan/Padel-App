@@ -27,7 +27,7 @@ model User {
   skillLevel    String         @default("BEGINNER") // BEGINNER / INTERMEDIATE / ADVANCED
   location      String?
   province      String?
-  isProfilePublic Boolean      @default(false)
+  isProfilePublic Boolean      @default(true)
   rank          Int            @default(0)
   points        Int            @default(0)
   wins          Int            @default(0)
@@ -55,6 +55,10 @@ model User {
   playerConversationsLow UserConversation[] @relation("PlayerConvLow")
   playerConversationsHigh UserConversation[] @relation("PlayerConvHigh")
   playerConversationMessages UserConversationMessage[]
+  matchesHosted Match[] @relation("MatchHost")
+  matchParticipations MatchParticipant[]
+  matchJoinRequests MatchJoinRequest[]
+  matchChatMessages MatchChatMessage[]
 }
 
 model PaddleOwner {
@@ -73,6 +77,7 @@ model PaddleOwner {
   courts           Court[]
   newsPosts        NewsPost[]
   coaches          Coach[]
+  referees         Referee[]
   chatGroups       ChatGroup[]
   chatMessages     ChatMessage[]
 }
@@ -248,6 +253,49 @@ model Coach {
   conversationMessages CoachConversationMessage[]
 }
 
+enum RefereeStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model Referee {
+  id                String        @id @default(uuid())
+  fullName          String
+  email             String        @unique
+  phoneNumber       String
+  password          String
+  profileImage      String?
+  location          String?
+  province          String?
+  hourlyRate        Decimal?
+  availableFromDay  WeekDay?
+  availableToDay    WeekDay?
+  availableFromTime String?
+  availableToTime   String?
+  status            RefereeStatus @default(ACTIVE)
+  paddleOwnerId     Int?
+  paddleOwner       PaddleOwner?  @relation(fields: [paddleOwnerId], references: [id], onDelete: SetNull)
+  courts            RefereeCourt[]
+  matches           Match[]
+  matchChatMessages MatchChatMessage[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([paddleOwnerId])
+  @@index([status])
+}
+
+model RefereeCourt {
+  refereeId String
+  courtId   String
+  referee   Referee @relation(fields: [refereeId], references: [id], onDelete: Cascade)
+  court     Court   @relation(fields: [courtId], references: [id], onDelete: Cascade)
+
+  @@id([refereeId, courtId])
+  @@index([courtId])
+}
+
 model CoachReview {
   id        String   @id @default(uuid())
   rating    Int // 1-5
@@ -358,6 +406,8 @@ model Court {
   paddleOwner     PaddleOwner          @relation(fields: [paddleOwnerId], references: [id], onDelete: Cascade)
   timeSlots       CourtTimeSlot[]
   bookings        CourtBooking[]
+  referees        RefereeCourt[]
+  matches         Match[]
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 }
@@ -393,6 +443,7 @@ model CourtBooking {
   user           User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   participants   CourtBookingParticipant[]
   joinRequests   CourtBookingJoinRequest[]
+  match          Match?
   createdAt      DateTime                   @default(now())
   updatedAt      DateTime                   @updatedAt
 
@@ -693,3 +744,100 @@ model ChatMessage {
 
   @@index([groupId, createdAt])
 }
+
+enum MatchStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+enum MatchInviteStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model Match {
+  id                   String             @id @default(uuid())
+  hostUserId           Int
+  courtId              String
+  courtBookingId       String             @unique
+  bookingDate          DateTime
+  startTime            String
+  endTime              String
+  isPublic             Boolean            @default(false)
+  openSlots            Int                @default(0)
+  title                String?
+  status               MatchStatus        @default(SCHEDULED)
+  refereeId            String?
+  refereeInviteStatus  MatchInviteStatus?
+  scoreJson            String             @default("{}")
+  scoreLogJson         String             @default("[]")
+  winnerTeam           Int?
+  rewardsApplied       Boolean            @default(false)
+  host                 User               @relation("MatchHost", fields: [hostUserId], references: [id], onDelete: Cascade)
+  court                Court              @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  booking              CourtBooking       @relation(fields: [courtBookingId], references: [id], onDelete: Cascade)
+  referee              Referee?           @relation(fields: [refereeId], references: [id], onDelete: SetNull)
+  participants         MatchParticipant[]
+  joinRequests         MatchJoinRequest[]
+  messages             MatchChatMessage[]
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@index([hostUserId])
+  @@index([courtId])
+  @@index([bookingDate])
+  @@index([refereeId])
+}
+
+model MatchParticipant {
+  id        String            @id @default(uuid())
+  matchId   String
+  userId    Int
+  isHost    Boolean           @default(false)
+  /// 0 = host team (left), 1 = other team (right)
+  team      Int               @default(0)
+  status    MatchInviteStatus @default(PENDING)
+  match     Match             @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@unique([matchId, userId])
+  @@index([userId])
+}
+
+model MatchJoinRequest {
+  id        String            @id @default(uuid())
+  matchId   String
+  userId    Int
+  status    MatchInviteStatus @default(PENDING)
+  match     Match             @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@unique([matchId, userId])
+  @@index([matchId, status])
+}
+
+model MatchChatMessage {
+  id               String          @id @default(uuid())
+  matchId          String
+  senderUserId     Int?
+  senderRefereeId  String?
+  type             ChatMessageType @default(TEXT)
+  text             String?
+  mediaUrl         String?
+  fileName         String?
+  mimeType         String?
+  durationSec      Int?
+  createdAt        DateTime        @default(now())
+  match            Match           @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  senderUser       User?           @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
+  senderReferee    Referee?        @relation(fields: [senderRefereeId], references: [id], onDelete: SetNull)
+
+  @@index([matchId, createdAt])
+}
+

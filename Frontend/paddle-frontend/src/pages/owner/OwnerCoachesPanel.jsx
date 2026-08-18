@@ -15,6 +15,7 @@ import {
   updateCoach,
 } from "../../api/owner";
 import CustomSelect from "../../components/CustomSelect";
+import PasswordToggleButton from "../../components/PasswordToggleButton";
 
 const GENDER_OPTIONS = [
   { value: "MALE", label: "Male" },
@@ -121,8 +122,11 @@ function Field({
   required,
   prefix,
   className = "",
+  type,
   ...props
 }) {
+  const [showPassword, setShowPassword] = useState(false);
+  const isPassword = type === "password";
   return (
     <label className={`block ${className}`}>
       {label && (
@@ -138,14 +142,21 @@ function Field({
           </span>
         )}
         <input
+          type={isPassword && showPassword ? "text" : type}
           required={required}
           className="w-full rounded-xl border border-white/10 bg-[#0e1821] py-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-[var(--color-primary)]/50"
           style={{
             paddingLeft: prefix ? "3.25rem" : "0.85rem",
-            paddingRight: "0.85rem",
+            paddingRight: isPassword ? "2.75rem" : "0.85rem",
           }}
           {...props}
         />
+        {isPassword && (
+          <PasswordToggleButton
+            show={showPassword}
+            onClick={() => setShowPassword((s) => !s)}
+          />
+        )}
       </div>
     </label>
   );
