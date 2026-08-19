@@ -65,6 +65,84 @@ export class ChatService {
     });
   }
 
+  async unreadCount(userId: number) {
+    let count = 0;
+
+    const memberships = await this.prisma.chatGroupMember.findMany({
+      where: { userId },
+      select: { groupId: true, lastReadAt: true },
+    });
+    for (const row of memberships) {
+      const last = await this.prisma.chatMessage.findFirst({
+        where: { groupId: row.groupId },
+        orderBy: { createdAt: 'desc' },
+        select: { senderUserId: true, senderOwnerId: true, createdAt: true },
+      });
+      if (!last) continue;
+      if (last.senderUserId === userId && last.senderOwnerId == null) continue;
+      if (!row.lastReadAt || last.createdAt > row.lastReadAt) count += 1;
+    }
+
+    const playerChats = await this.prisma.userConversation.findMany({
+      where: { OR: [{ userLowId: userId }, { userHighId: userId }] },
+      select: {
+        userLowId: true,
+        userLowLastReadAt: true,
+        userHighLastReadAt: true,
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { senderUserId: true, createdAt: true },
+        },
+      },
+    });
+    for (const chat of playerChats) {
+      const last = chat.messages[0];
+      if (!last || last.senderUserId === userId) continue;
+      const lastReadAt =
+        chat.userLowId === userId
+          ? chat.userLowLastReadAt
+          : chat.userHighLastReadAt;
+      if (!lastReadAt || last.createdAt > lastReadAt) count += 1;
+    }
+
+    const matches = await this.prisma.matchParticipant.findMany({
+      where: { userId, status: 'ACCEPTED' },
+      select: { matchId: true, lastReadAt: true },
+    });
+    for (const row of matches) {
+      const last = await this.prisma.matchChatMessage.findFirst({
+        where: { matchId: row.matchId },
+        orderBy: { createdAt: 'desc' },
+        select: { senderUserId: true, senderRefereeId: true, createdAt: true },
+      });
+      if (!last) continue;
+      if (last.senderUserId === userId && last.senderRefereeId == null) continue;
+      if (!row.lastReadAt || last.createdAt > row.lastReadAt) count += 1;
+    }
+
+    const coachChats = await this.prisma.coachConversation.findMany({
+      where: { userId },
+      select: {
+        userLastReadAt: true,
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { senderCoachId: true, createdAt: true },
+        },
+      },
+    });
+    for (const chat of coachChats) {
+      const last = chat.messages[0];
+      if (!last?.senderCoachId) continue;
+      if (!chat.userLastReadAt || last.createdAt > chat.userLastReadAt) {
+        count += 1;
+      }
+    }
+
+    return { count };
+  }
+
   async findAllForUser(userId: number) {
     const groups = await this.prisma.chatGroup.findMany({
       orderBy: { updatedAt: 'desc' },
@@ -212,6 +290,13 @@ export class ChatService {
   ) {
     const group = await this.getGroup(groupId);
     await this.assertCanChat(group, auth);
+
+    if (auth.role !== Roles.PADDLE_OWNER && !after) {
+      await this.prisma.chatGroupMember.updateMany({
+        where: { groupId, userId: auth.userId },
+        data: { lastReadAt: new Date() },
+      });
+    }
 
     const afterMsg = after
       ? await this.prisma.chatMessage.findUnique({ where: { id: after } })

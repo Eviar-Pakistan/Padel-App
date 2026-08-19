@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaCalendarAlt,
@@ -16,18 +17,21 @@ import TopNav from "../components/TopNav";
 import BottomNav from "../components/BottomNav";
 import banner from "../assets/images/padle_banner.png";
 import paddleLogo from "../assets/images/padel_logo.png";
+import { getLiveMatches } from "../api/matches";
+import { getChatUnreadCount } from "../api/chat";
 
 const menuItems = [
   { id: "booking", label: "Booking Courts", icon: FaCalendarAlt },
   { id: "matches", label: "Matches", icon: FaTrophy },
-  { id: "live", label: "Live", icon: FaBroadcastTower, badge: "LIVE" },
+  { id: "live", label: "Live", icon: FaBroadcastTower },
   { id: "results", label: "Results", icon: FaChartBar },
   { id: "leaderboard", label: "Leaderboard", icon: FaMedal },
-  { id: "chat", label: "Chat", icon: FaComments, count: 3 },
   { id: "players", label: "Top Players", icon: FaStar },
+  { id: "chat", label: "Chat", icon: FaComments },
   { id: "news", label: "News Feed", icon: FaNewspaper },
   { id: "coaches", label: "Coaches", icon: FaUserTie },
   { id: "shop", label: "Shop", icon: FaShoppingBag },
+  { id: "calendar", label: "Calendar", icon: FaCalendarAlt },
   { id: "info", label: "Padel Info", icon: FaInfoCircle },
 ];
 
@@ -41,6 +45,22 @@ const navRoutes = {
 
 export default function Home() {
   const navigate = useNavigate();
+  const [hasLiveMatch, setHasLiveMatch] = useState(false);
+  const [chatUnread, setChatUnread] = useState(0);
+
+  useEffect(() => {
+    const load = () => {
+      getLiveMatches()
+        .then(({ data }) => setHasLiveMatch(Array.isArray(data) && data.length > 0))
+        .catch(() => setHasLiveMatch(false));
+      getChatUnreadCount()
+        .then(({ data }) => setChatUnread(Number(data?.count) || 0))
+        .catch(() => setChatUnread(0));
+    };
+    load();
+    const t = setInterval(load, 20000);
+    return () => clearInterval(t);
+  }, []);
 
   return (
     <div className="min-h-dvh bg-[var(--color-background)]">
@@ -56,7 +76,7 @@ export default function Home() {
         </section>
 
         <section className="mt-5 grid grid-cols-3 gap-3">
-          {menuItems.map(({ id, label, icon: Icon, badge, count }) => (
+          {menuItems.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
@@ -71,18 +91,19 @@ export default function Home() {
                 if (id === "matches") navigate("/matches");
                 if (id === "live") navigate("/live");
                 if (id === "results") navigate("/results");
-                if (id === "leaderboard") navigate("/players");
+                if (id === "calendar") navigate("/calendar");
+                if (id === "leaderboard") navigate("/leaderboard");
               }}
               className="relative flex aspect-square flex-col items-start justify-between rounded-[22px] bg-[#1c2430] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:bg-[#222b38]"
             >
-              {badge && (
-                <span className="absolute right-2.5 top-2.5 rounded bg-red-500 px-1.5 py-0.5 text-[9px] font-bold leading-none text-white">
-                  {badge}
+              {id === "live" && hasLiveMatch && (
+                <span className="absolute right-2.5 top-2.5 rounded bg-[var(--color-secondary)] px-1.5 py-0.5 text-[9px] font-bold leading-none text-white">
+                  LIVE
                 </span>
               )}
-              {count != null && (
+              {id === "chat" && chatUnread > 0 && (
                 <span className="absolute right-2.5 top-2.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                  {count}
+                  {chatUnread > 99 ? "99+" : chatUnread}
                 </span>
               )}
               <Icon className="h-7 w-7 text-[var(--color-primary)]" />

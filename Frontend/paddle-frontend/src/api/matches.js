@@ -3,6 +3,7 @@ import api from "./axios";
 export const getMatches = () => api.get("matches");
 export const getLiveMatches = () => api.get("matches/live");
 export const getMatchResults = () => api.get("matches/results");
+export const getMatchHistory = () => api.get("matches/history");
 export const getMatch = (id) => api.get(`matches/${id}`);
 export const getMatchPlayers = () => api.get("matches/players");
 export const getMatchReferees = (params) =>
@@ -18,6 +19,13 @@ export const assignMatchReferee = (id, refereeId) =>
   api.post(`matches/${id}/referee`, { refereeId });
 export const switchMatchTeams = (id, data) =>
   api.post(`matches/${id}/teams`, data);
+export const setMatchReminder = (id, on) =>
+  on ? api.post(`matches/${id}/remind`) : api.delete(`matches/${id}/remind`);
+export const setMatchCalendar = (id, on) =>
+  on
+    ? api.post(`matches/${id}/calendar`)
+    : api.delete(`matches/${id}/calendar`);
+export const getCalendarEvents = () => api.get("matches/calendar");
 export const deleteMatch = (id) => api.delete(`matches/${id}`);
 export const getMatchMessages = (id, after) =>
   api.get(`matches/${id}/messages`, { params: after ? { after } : {} });

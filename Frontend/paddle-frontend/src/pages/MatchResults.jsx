@@ -28,7 +28,7 @@ export default function MatchResults() {
         <div>
           <h1 className="text-2xl font-bold text-white">Results</h1>
           <p className="text-xs text-white/40">
-            Finished matches. Winners get +1 win and +50 points (rank +1 per 100 points).
+            Every finished match, visible to all players
           </p>
         </div>
         {error && <p className="text-sm text-red-400">{error}</p>}

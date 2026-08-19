@@ -26,6 +26,7 @@ const panelLinks = [
   { id: "news", label: "News Feed", icon: FaNewspaper, path: "/news" },
   { id: "courts", label: "Courts", icon: FaCalendarAlt, path: "/courts" },
   { id: "matches", label: "Matches", icon: FaTrophy, path: "/matches" },
+  { id: "calendar", label: "Calendar", icon: FaCalendarAlt, path: "/calendar" },
   { id: "coaches", label: "Coaches", icon: FaUserTie, path: "/coaches" },
   { id: "shop", label: "Shop", icon: FaShoppingBag, path: "/shop" },
   { id: "cart", label: "Cart", icon: FaShoppingCart, path: "/cart" },

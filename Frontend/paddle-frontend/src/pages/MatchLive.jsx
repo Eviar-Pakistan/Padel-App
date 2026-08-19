@@ -4,11 +4,7 @@ import { FaArrowLeft } from "react-icons/fa";
 import TopNav from "../components/TopNav";
 import BottomNav from "../components/BottomNav";
 import MatchCard from "../components/MatchCard";
-import LiveScoreBoard from "../components/LiveScoreBoard";
-import MatchResultCard from "../components/MatchResultCard";
-import { getMatch, deleteMatch, switchMatchTeams } from "../api/matches";
-import { useMatchLiveSocket } from "../hooks/useMatchLiveSocket";
-import { useAuthToken } from "../hooks/useMatchLiveFeed";
+import { getMatch, deleteMatch, switchMatchTeams, setMatchReminder, setMatchCalendar } from "../api/matches";
 
 export default function MatchLive() {
   const { id } = useParams();
@@ -18,7 +14,7 @@ export default function MatchLive() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [switching, setSwitching] = useState(false);
-  const token = useAuthToken();
+  const [message, setMessage] = useState("");
 
   const meId = (() => {
     try {
@@ -66,6 +62,41 @@ export default function MatchLive() {
     }
   };
 
+  const toggleRemind = async () => {
+    if (!match) return;
+    setError("");
+    try {
+      const { data } = await setMatchReminder(id, !match.reminded);
+      setMatch(data);
+      setMessage(
+        data.reminded
+          ? "Reminder set. You will be notified when the match starts."
+          : "Reminder removed."
+      );
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Could not update reminder.");
+    }
+  };
+
+  const toggleCalendar = async () => {
+    if (!match) return;
+    setError("");
+    try {
+      const on = !match.onCalendar;
+      const { data } = await setMatchCalendar(id, on);
+      setMatch(data);
+      if (on) {
+        navigate(`/calendar?date=${String(data.bookingDate).slice(0, 10)}`);
+      } else {
+        setMessage("Removed from your calendar.");
+      }
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Could not update calendar.");
+    }
+  };
+
   useEffect(() => {
     getMatch(id)
       .then(({ data }) => setMatch(data))
@@ -75,14 +106,6 @@ export default function MatchLive() {
       })
       .finally(() => setLoading(false));
   }, [id]);
-
-  useMatchLiveSocket({
-    matchId: id,
-    token,
-    enabled: Boolean(id && token),
-    onScore: (payload) => payload?.id === id && setMatch(payload),
-    onFinished: (payload) => payload?.id === id && setMatch(payload),
-  });
 
   return (
     <div className="min-h-dvh bg-[var(--color-background)]">
@@ -96,11 +119,10 @@ export default function MatchLive() {
           >
             <FaArrowLeft className="h-3.5 w-3.5" />
           </button>
-          <h1 className="text-lg font-bold text-white">
-            {match?.lifecycle === "LIVE" ? "Live match" : "Match"}
-          </h1>
+          <h1 className="text-lg font-bold text-white">Match</h1>
         </div>
         {error && <p className="text-sm text-red-400">{error}</p>}
+        {message && <p className="text-sm text-emerald-400">{message}</p>}
         {loading ? (
           <p className="text-sm text-white/40">Loading...</p>
         ) : match ? (
@@ -108,18 +130,16 @@ export default function MatchLive() {
             <MatchCard
               match={match}
               isHost={isHost}
+              reminding={Boolean(match.reminded)}
+              calendared={Boolean(match.onCalendar)}
               deleting={deleting}
               switching={switching}
-              onView={() => {}}
-              onRemind={() => {}}
-              onCalendar={() => {}}
+              onView={() => navigate(`/live/${id}`)}
+              onRemind={toggleRemind}
+              onCalendar={toggleCalendar}
               onDelete={removeMatch}
               onSwitchTeams={switchTeams}
             />
-            {(match.lifecycle === "LIVE" || match.score?.finished) && (
-              <LiveScoreBoard match={match} />
-            )}
-            {match.score?.finished && <MatchResultCard match={match} />}
             {match.referee && (
               <div className="rounded-2xl border border-white/10 bg-[var(--color-surface)] px-4 py-3">
                 <p className="text-[11px] uppercase tracking-wide text-white/40">

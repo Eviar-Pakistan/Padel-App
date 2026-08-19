@@ -12,6 +12,7 @@ export default function LiveMatches() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [expandedId, setExpandedId] = useState(null);
 
   const load = async () => {
     setError("");
@@ -38,10 +39,12 @@ export default function LiveMatches() {
     enabled: matches.length > 0,
     onScore: (payload) => {
       if (!payload?.id) return;
+      if (payload.lifecycle && payload.lifecycle !== "LIVE") {
+        setExpandedId((id) => (id === payload.id ? null : id));
+        setMatches((prev) => prev.filter((m) => m.id !== payload.id));
+        return;
+      }
       setMatches((prev) => {
-        if (payload.lifecycle && payload.lifecycle !== "LIVE") {
-          return prev.filter((m) => m.id !== payload.id);
-        }
         if (prev.some((m) => m.id === payload.id)) {
           return prev.map((m) => (m.id === payload.id ? payload : m));
         }
@@ -57,7 +60,9 @@ export default function LiveMatches() {
         <div className="flex items-end justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Live Matches</h1>
-            <p className="text-xs text-white/40">Scores update as the referee records points</p>
+            <p className="text-xs text-white/40">
+              Tap Watch Live Score to open scoring
+            </p>
           </div>
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-primary)]">
             <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
@@ -77,7 +82,13 @@ export default function LiveMatches() {
               <li key={match.id}>
                 <LiveScoreBoard
                   match={match}
-                  onWatch={() => navigate(`/matches/${match.id}`)}
+                  expandable
+                  expanded={expandedId === match.id}
+                  onWatch={() =>
+                    setExpandedId((current) =>
+                      current === match.id ? null : match.id
+                    )
+                  }
                 />
               </li>
             ))}

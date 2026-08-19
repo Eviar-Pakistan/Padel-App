@@ -32,12 +32,8 @@ export class RefereesController {
   constructor(private readonly refereesService: RefereesService) {}
 
   @Post('register')
-  @UseInterceptors(profileUpload)
-  register(
-    @Body() dto: CreateRefereeDto,
-    @UploadedFile() profileImage?: Express.Multer.File,
-  ) {
-    return this.refereesService.create(dto, profileImage);
+  register(@Body() dto: CreateRefereeDto) {
+    return this.refereesService.create(dto);
   }
 
   @Post('login')

@@ -27,6 +27,12 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard, UserGuard)
+  @Get('leaderboard')
+  listLeaderboard() {
+    return this.usersService.listLeaderboard();
+  }
+
+  @UseGuards(JwtAuthGuard, UserGuard)
   @Get('me')
   getProfile(@Req() req: { user: { userId: number } }) {
     return this.usersService.getProfile(req.user.userId);

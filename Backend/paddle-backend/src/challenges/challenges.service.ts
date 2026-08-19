@@ -318,6 +318,16 @@ export class ChallengesService {
       conversationId,
     );
 
+    if (!after) {
+      const isLow = conversation.userLowId === userId;
+      await this.prisma.userConversation.update({
+        where: { id: conversation.id },
+        data: isLow
+          ? { userLowLastReadAt: new Date() }
+          : { userHighLastReadAt: new Date() },
+      });
+    }
+
     const afterMsg = after
       ? await this.prisma.userConversationMessage.findUnique({
           where: { id: after },

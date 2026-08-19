@@ -4,6 +4,8 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import {
   BookingStatus,
@@ -26,6 +28,7 @@ import {
   parseScoreLog,
   publicScoreView,
   rankFromPoints,
+  winnerFromScore,
   type ScoreKind,
   type ScoreState,
   type TeamIndex,
@@ -73,11 +76,26 @@ const refereeSelect = {
 } satisfies Prisma.RefereeSelect;
 
 @Injectable()
-export class MatchesService {
+export class MatchesService implements OnModuleInit, OnModuleDestroy {
+  private reminderTimer: ReturnType<typeof setInterval> | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly chatMedia: ChatMediaService,
   ) {}
+
+  onModuleInit() {
+    this.reminderTimer = setInterval(() => {
+      this.notifyDueReminders().catch(() => undefined);
+      this.settleExpiredMatches().catch(() => undefined);
+    }, 30000);
+    this.notifyDueReminders().catch(() => undefined);
+    this.settleExpiredMatches().catch(() => undefined);
+  }
+
+  onModuleDestroy() {
+    if (this.reminderTimer) clearInterval(this.reminderTimer);
+  }
 
   private toDateOnly(dateStr: string) {
     const date = new Date(`${dateStr}T00:00:00.000Z`);
@@ -135,21 +153,101 @@ export class MatchesService {
     if (end <= start) end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
     const now = Date.now();
     if (now >= start.getTime() && now < end.getTime()) return 'LIVE';
-    if (now >= end.getTime()) {
-      const score = parseScore(match.scoreJson);
-      const inPlay =
-        !score.winnerTeam &&
-        (score.pointA ||
-          score.pointB ||
-          score.gameA ||
-          score.gameB ||
-          score.setA ||
-          score.setB ||
-          score.tieA ||
-          score.tieB);
-      return inPlay ? 'LIVE' : 'COMPLETED';
-    }
+    if (now >= end.getTime()) return 'COMPLETED';
     return 'SCHEDULED';
+  }
+
+  private winningParticipants(
+    participants: {
+      userId: number;
+      team: number;
+      status: MatchInviteStatus;
+    }[],
+    winnerTeam: TeamIndex,
+  ) {
+    return participants.filter(
+      (p) =>
+        p.status === MatchInviteStatus.ACCEPTED &&
+        Number(p.team) === Number(winnerTeam),
+    );
+  }
+
+  private async applyWinnerRewards(
+    tx: Prisma.TransactionClient,
+    match: {
+      id: string;
+      rewardsApplied: boolean;
+      scoreJson?: string | null;
+      participants: {
+        userId: number;
+        team: number;
+        status: MatchInviteStatus;
+      }[];
+    },
+    winnerTeam: TeamIndex,
+  ) {
+    if (match.rewardsApplied) return;
+    const winners = this.winningParticipants(match.participants, winnerTeam);
+    const score = parseScore(match.scoreJson);
+    score.winnerTeam = winnerTeam;
+    const claimed = await tx.match.updateMany({
+      where: { id: match.id, rewardsApplied: false },
+      data: {
+        winnerTeam,
+        status: MatchStatus.COMPLETED,
+        rewardsApplied: true,
+        scoreJson: JSON.stringify(score),
+      },
+    });
+    if (claimed.count === 0) return;
+    for (const p of winners) {
+      const user = await tx.user.findUnique({
+        where: { id: p.userId },
+        select: { points: true },
+      });
+      const points = Number(user?.points || 0) + 50;
+      await tx.user.update({
+        where: { id: p.userId },
+        data: {
+          points,
+          wins: { increment: 1 },
+          rank: rankFromPoints(points),
+        },
+      });
+    }
+  }
+
+  async settleExpiredMatches() {
+    const rows = await this.prisma.match.findMany({
+      where: {
+        rewardsApplied: false,
+        status: { not: MatchStatus.CANCELLED },
+      },
+      include: { participants: true },
+      take: 80,
+    });
+    for (const match of rows) {
+      const score = parseScore(match.scoreJson);
+      const official = winnerFromScore(score, false);
+      const expired = this.computedStatus(match) === 'COMPLETED';
+      const winner = official ?? (expired ? winnerFromScore(score, true) : null);
+      if (!official && !expired) continue;
+      await this.prisma.$transaction(async (tx) => {
+        const fresh = await tx.match.findUnique({
+          where: { id: match.id },
+          include: { participants: true },
+        });
+        if (!fresh || fresh.rewardsApplied) return;
+        if (winner == null) {
+          await tx.match.update({
+            where: { id: match.id },
+            data: { status: MatchStatus.COMPLETED, rewardsApplied: true },
+          });
+          return;
+        }
+        await this.applyWinnerRewards(tx, fresh, winner);
+      });
+    }
   }
 
   private dayInRange(from: WeekDay, to: WeekDay, day: WeekDay) {
@@ -254,6 +352,110 @@ export class MatchesService {
     return publicScoreView(parseScore(match.scoreJson), this.teamNames(match));
   }
 
+  private async withWatchFlags<T extends { id: string }>(
+    userId: number,
+    matches: T[],
+  ) {
+    if (!matches.length) return matches;
+    const watches = await this.prisma.matchWatch.findMany({
+      where: { userId, matchId: { in: matches.map((m) => m.id) } },
+    });
+    const map = new Map(watches.map((w) => [w.matchId, w]));
+    return matches.map((m) => {
+      const w = map.get(m.id);
+      return {
+        ...m,
+        reminded: Boolean(w?.remind),
+        onCalendar: Boolean(w?.onCalendar),
+      };
+    });
+  }
+
+  async toggleWatch(
+    userId: number,
+    matchId: string,
+    field: 'remind' | 'onCalendar',
+    enabled: boolean,
+  ) {
+    const match = await this.prisma.match.findUnique({ where: { id: matchId } });
+    if (!match) throw new NotFoundException('Match not found');
+    if (match.status === MatchStatus.CANCELLED) {
+      throw new BadRequestException('This match was cancelled');
+    }
+    const existing = await this.prisma.matchWatch.findUnique({
+      where: { userId_matchId: { userId, matchId } },
+    });
+    const remind = field === 'remind' ? enabled : Boolean(existing?.remind);
+    const onCalendar =
+      field === 'onCalendar' ? enabled : Boolean(existing?.onCalendar);
+    if (!remind && !onCalendar) {
+      if (existing) {
+        await this.prisma.matchWatch.delete({ where: { id: existing.id } });
+      }
+    } else if (existing) {
+      await this.prisma.matchWatch.update({
+        where: { id: existing.id },
+        data: {
+          remind,
+          onCalendar,
+          ...(field === 'remind' && enabled ? { notifiedAt: null } : {}),
+        },
+      });
+    } else {
+      await this.prisma.matchWatch.create({
+        data: { userId, matchId, remind, onCalendar },
+      });
+    }
+    return this.findOneForUser(userId, matchId);
+  }
+
+  async listCalendarEvents(userId: number) {
+    const watches = await this.prisma.matchWatch.findMany({
+      where: { userId, onCalendar: true },
+      include: { match: { include: this.include } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return watches
+      .filter((w) => w.match.status !== MatchStatus.CANCELLED)
+      .map((w) => this.serialize(w.match));
+  }
+
+  async notifyDueReminders() {
+    const watches = await this.prisma.matchWatch.findMany({
+      where: { remind: true, notifiedAt: null },
+      include: {
+        match: { include: { court: { select: { name: true } } } },
+      },
+    });
+    const now = Date.now();
+    for (const watch of watches) {
+      const match = watch.match;
+      if (match.status === MatchStatus.CANCELLED) continue;
+      const lifecycle = this.computedStatus(match);
+      if (lifecycle !== 'LIVE') continue;
+      const start = this.localDateTime(
+        this.dateKey(match.bookingDate),
+        match.startTime,
+      );
+      if (now < start.getTime()) continue;
+      await this.prisma.$transaction([
+        this.prisma.notification.create({
+          data: {
+            receiverId: watch.userId,
+            senderId: 0,
+            type: 'Match Reminder',
+            message: `Your reminder: match at ${match.court?.name || 'the court'} is starting now (${match.startTime}).`,
+            meta: { action: 'OPEN_MATCH', matchId: match.id },
+          },
+        }),
+        this.prisma.matchWatch.update({
+          where: { id: watch.id },
+          data: { notifiedAt: new Date() },
+        }),
+      ]);
+    }
+  }
+
   private async assertChatAccess(
     matchId: string,
     auth: { kind: 'user' | 'referee'; id: number | string },
@@ -335,27 +537,50 @@ export class MatchesService {
 
   async listForUser(userId: number) {
     const rows = await this.prisma.match.findMany({
-      where: {
-        status: { not: MatchStatus.CANCELLED },
-        OR: [
-          { isPublic: true },
-          { hostUserId: userId },
-          { participants: { some: { userId } } },
-        ],
-      },
+      where: { status: { not: MatchStatus.CANCELLED } },
       orderBy: [{ bookingDate: 'asc' }, { startTime: 'asc' }],
       include: this.include,
     });
-    return rows.map((m) => this.serialize(m));
+    const upcoming = rows
+      .map((m) => this.serialize(m))
+      .filter(
+        (m) => m.lifecycle === 'SCHEDULED' || m.lifecycle === 'LIVE',
+      );
+    return this.withWatchFlags(userId, upcoming);
   }
 
-  async findOneForUser(_userId: number, id: string) {
+  async listHistoryForUser(userId: number) {
+    await this.settleExpiredMatches();
+    const rows = await this.prisma.match.findMany({
+      where: {
+        status: { not: MatchStatus.CANCELLED },
+        OR: [
+          { hostUserId: userId },
+          {
+            participants: {
+              some: { userId, status: MatchInviteStatus.ACCEPTED },
+            },
+          },
+        ],
+      },
+      orderBy: [{ bookingDate: 'desc' }, { startTime: 'desc' }],
+      include: this.include,
+    });
+    return rows
+      .map((m) => this.serialize(m))
+      .filter((m) => m.lifecycle === 'COMPLETED');
+  }
+
+  async findOneForUser(userId: number, id: string) {
     const match = await this.prisma.match.findUnique({
       where: { id },
       include: this.include,
     });
     if (!match) throw new NotFoundException('Match not found');
-    return this.serialize(match);
+    const [withFlags] = await this.withWatchFlags(userId, [
+      this.serialize(match),
+    ]);
+    return withFlags;
   }
 
   async listLive() {
@@ -371,16 +596,16 @@ export class MatchesService {
   }
 
   async listResults() {
+    await this.settleExpiredMatches();
     const rows = await this.prisma.match.findMany({
-      where: {
-        status: { not: MatchStatus.CANCELLED },
-        winnerTeam: { not: null },
-      },
-      orderBy: [{ updatedAt: 'desc' }],
+      where: { status: { not: MatchStatus.CANCELLED } },
+      orderBy: [{ bookingDate: 'desc' }, { startTime: 'desc' }],
       include: this.include,
-      take: 80,
+      take: 200,
     });
-    return rows.map((m) => this.serialize(m));
+    return rows
+      .map((m) => this.serialize(m))
+      .filter((m) => m.lifecycle === 'COMPLETED');
   }
 
   async findOneForReferee(refereeId: string, id: string) {
@@ -423,6 +648,14 @@ export class MatchesService {
     if (match.status === MatchStatus.CANCELLED) {
       throw new BadRequestException('This match was cancelled');
     }
+    const lifecycle = this.computedStatus(match);
+    if (lifecycle !== 'LIVE') {
+      throw new BadRequestException(
+        lifecycle === 'COMPLETED'
+          ? 'Match time has ended. Scoring is closed.'
+          : 'Scoring is only allowed while the match is live.',
+      );
+    }
 
     const current = parseScore(match.scoreJson);
     if (current.winnerTeam != null && dto.kind !== 'UNDO') {
@@ -455,27 +688,14 @@ export class MatchesService {
           status: finished ? MatchStatus.COMPLETED : match.status,
         },
       });
-      if (finished && !match.rewardsApplied && next.winnerTeam != null) {
-        const winners = match.participants.filter(
-          (p) =>
-            p.status === MatchInviteStatus.ACCEPTED &&
-            Number(p.team) === next.winnerTeam,
-        );
-        for (const p of winners) {
-          const points = Number(p.user?.points || 0) + 50;
-          await tx.user.update({
-            where: { id: p.userId },
-            data: {
-              points,
-              wins: { increment: 1 },
-              rank: rankFromPoints(points),
-            },
-          });
-        }
-        await tx.match.update({
+      if (finished && next.winnerTeam != null) {
+        const fresh = await tx.match.findUnique({
           where: { id: matchId },
-          data: { rewardsApplied: true },
+          include: { participants: true },
         });
+        if (fresh) {
+          await this.applyWinnerRewards(tx, fresh, next.winnerTeam);
+        }
       }
       return row;
     });
@@ -837,7 +1057,13 @@ export class MatchesService {
     if (match.status === MatchStatus.CANCELLED) {
       throw new BadRequestException('This match was cancelled');
     }
-    if (this.computedStatus(match) === 'COMPLETED') {
+    const lifecycle = this.computedStatus(match);
+    if (lifecycle === 'LIVE') {
+      throw new BadRequestException(
+        'Teams cannot be switched after the match has started',
+      );
+    }
+    if (lifecycle === 'COMPLETED') {
       throw new BadRequestException('This match has already finished');
     }
 
@@ -1048,6 +1274,18 @@ export class MatchesService {
     after?: string,
   ) {
     await this.assertChatAccess(matchId, auth);
+    if (auth.kind === 'user' && !after) {
+      await this.prisma.matchParticipant.updateMany({
+        where: { matchId, userId: Number(auth.id) },
+        data: { lastReadAt: new Date() },
+      });
+    }
+    if (auth.kind === 'referee' && !after) {
+      await this.prisma.match.update({
+        where: { id: matchId },
+        data: { refereeLastReadAt: new Date() },
+      });
+    }
     const afterMsg = after
       ? await this.prisma.matchChatMessage.findUnique({ where: { id: after } })
       : null;
@@ -1143,6 +1381,19 @@ export class MatchesService {
         messages: { orderBy: { createdAt: 'desc' }, take: 1 },
       },
     });
-    return rows.map((m) => this.serialize(m));
+    return Promise.all(
+      rows.map(async (m) => {
+        const unreadCount = await this.prisma.matchChatMessage.count({
+          where: {
+            matchId: m.id,
+            senderUserId: { not: null },
+            ...(m.refereeLastReadAt
+              ? { createdAt: { gt: m.refereeLastReadAt } }
+              : {}),
+          },
+        });
+        return { ...this.serialize(m), unreadCount };
+      }),
+    );
   }
 }

@@ -1,6 +1,7 @@
 import api from "./axios";
 import ownerApi from "./ownerApi";
 
+export const getChatUnreadCount = () => api.get("chat/unread-count");
 export const getChatGroups = () => api.get("chat/groups");
 export const requestJoinChatGroup = (id) => api.post(`chat/groups/${id}/join`);
 export const getChatGroup = (id) => api.get(`chat/groups/${id}`);

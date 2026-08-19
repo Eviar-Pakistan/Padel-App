@@ -1,4 +1,4 @@
-import { FaChartBar, FaCheck, FaUser } from "react-icons/fa";
+import { FaChartBar, FaCheck, FaChevronUp, FaUser } from "react-icons/fa";
 
 function mediaUrl(path) {
   if (!path) return null;
@@ -39,10 +39,16 @@ function Avatar({ user, compact }) {
         )}
       </div>
       {user && (
-        <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[var(--color-primary)] ring-2 ring-[#16301f]" />
+        <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[var(--color-primary)] ring-2 ring-[var(--color-surface)]" />
       )}
     </div>
   );
+}
+
+function firstName(fullName) {
+  const name = String(fullName || "").trim();
+  if (!name) return "Open";
+  return name.split(/\s+/)[0];
 }
 
 function TeamCol({ players, align = "left" }) {
@@ -54,9 +60,32 @@ function TeamCol({ players, align = "left" }) {
           className={`flex min-w-0 items-center gap-2 ${align === "right" ? "flex-row-reverse" : ""}`}
         >
           <Avatar user={p?.user} compact />
-          <p className="truncate text-[11px] font-semibold text-white">
-            {p?.user?.fullName || "Open"}
+          <p className="truncate text-[12px] font-semibold text-white">
+            {firstName(p?.user?.fullName)}
           </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ScoreBoxes({ score, className = "" }) {
+  return (
+    <div className={className}>
+      {[
+        ["SETS", score.setA ?? 0, score.setB ?? 0],
+        ["GAMES", score.gameA ?? 0, score.gameB ?? 0],
+        ["POINTS", score.pointsLabelA ?? "0", score.pointsLabelB ?? "0"],
+      ].map(([label, a, b]) => (
+        <div
+          key={label}
+          className="rounded-lg bg-black/35 px-1 py-1.5 text-center"
+        >
+          <p className="text-[8px] font-bold uppercase tracking-wide text-white/40">
+            {label}
+          </p>
+          <p className="text-sm font-black text-[var(--color-primary)]">{a}</p>
+          <p className="text-sm font-black text-white">{b}</p>
         </div>
       ))}
     </div>
@@ -75,7 +104,7 @@ function StatBar({ label, a, b }) {
       </div>
       <div className="flex h-1.5 overflow-hidden rounded-full bg-white/10">
         <div
-          className="h-full bg-[var(--color-primary)]"
+          className="h-full bg-[var(--color-secondary)]"
           style={{ width: `${left}%` }}
         />
         <div
@@ -91,14 +120,21 @@ export default function LiveScoreBoard({
   match,
   onWatch,
   compact = false,
+  expandable = false,
+  expanded = true,
 }) {
   const score = match?.score || {};
   const { left, right } = teamsFromMatch(match);
   const live = match?.lifecycle === "LIVE" && !score.finished;
+  const showDetails = !expandable || expanded;
 
   return (
-    <article className="overflow-hidden rounded-[1.6rem] border border-white/10 bg-[#16301f] p-3.5">
-      <div className="mb-3 flex items-center justify-between gap-2">
+    <article
+      className={`overflow-hidden rounded-[1.6rem] border border-white/10 bg-[var(--color-surface)] ${
+        expandable && !expanded ? "p-3" : "p-3.5"
+      }`}
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
         <span
           className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
             live
@@ -117,65 +153,78 @@ export default function LiveScoreBoard({
 
       <div className="flex items-center gap-2">
         <TeamCol players={left} />
-        <div className="grid w-[9.5rem] shrink-0 grid-cols-3 gap-1">
-          {[
-            ["SETS", score.setA ?? 0, score.setB ?? 0],
-            ["GAMES", score.gameA ?? 0, score.gameB ?? 0],
-            ["POINTS", score.pointsLabelA ?? "0", score.pointsLabelB ?? "0"],
-          ].map(([label, a, b]) => (
-            <div
-              key={label}
-              className="rounded-lg bg-black/35 px-1 py-1.5 text-center"
-            >
-              <p className="text-[8px] font-bold uppercase tracking-wide text-white/40">
-                {label}
-              </p>
-              <p className="text-sm font-black text-[var(--color-primary)]">{a}</p>
-              <p className="text-sm font-black text-white">{b}</p>
-            </div>
-          ))}
-        </div>
+        {expandable ? (
+          <p className="shrink-0 px-1 text-xs font-black text-white/70">VS</p>
+        ) : (
+          <ScoreBoxes
+            score={score}
+            className="grid w-[9.5rem] shrink-0 grid-cols-3 gap-1"
+          />
+        )}
         <TeamCol players={right} align="right" />
       </div>
 
-      {score.event && (
-        <p className="mt-3 text-center text-[11px] font-bold text-[var(--color-primary)]">
-          {score.event}
-        </p>
-      )}
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+          showDetails ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        }`}
+      >
+        <div className="overflow-hidden">
+          {expandable && (
+            <ScoreBoxes
+              score={score}
+              className="mt-3 grid grid-cols-3 gap-1.5"
+            />
+          )}
+          {score.event && (
+            <p className="mt-3 text-center text-[11px] font-bold text-[var(--color-primary)]">
+              {score.event}
+            </p>
+          )}
 
-      {!compact && (
-        <div className="mt-4 space-y-3">
-          <StatBar label="ACES" a={score.aceA || 0} b={score.aceB || 0} />
-          <StatBar
-            label="WINNERS"
-            a={score.winnersA || 0}
-            b={score.winnersB || 0}
-          />
-          <StatBar
-            label="ERRORS"
-            a={score.errorsA || 0}
-            b={score.errorsB || 0}
-          />
+          {!compact && (
+            <div className="mt-4 space-y-3">
+              <StatBar label="ACES" a={score.aceA || 0} b={score.aceB || 0} />
+              <StatBar
+                label="WINNERS"
+                a={score.winnersA || 0}
+                b={score.winnersB || 0}
+              />
+              <StatBar
+                label="ERRORS"
+                a={score.errorsA || 0}
+                b={score.errorsB || 0}
+              />
+            </div>
+          )}
+
+          {score.finished && (
+            <p className="mt-3 inline-flex w-full items-center justify-center gap-1.5 text-[11px] font-semibold text-[var(--color-primary)]">
+              <FaCheck className="h-3 w-3" />
+              Match finished
+            </p>
+          )}
         </div>
-      )}
+      </div>
 
       {onWatch && (
         <button
           type="button"
           onClick={onWatch}
-          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-primary)] py-3 text-sm font-bold text-[var(--color-background)]"
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-primary)] py-2.5 text-sm font-bold text-[var(--color-background)]"
         >
-          <FaChartBar className="h-4 w-4" />
-          Watch Live Score
+          {expandable && expanded ? (
+            <>
+              <FaChevronUp className="h-3.5 w-3.5" />
+              Hide live score
+            </>
+          ) : (
+            <>
+              <FaChartBar className="h-4 w-4" />
+              Watch Live Score
+            </>
+          )}
         </button>
-      )}
-
-      {score.finished && (
-        <p className="mt-3 inline-flex w-full items-center justify-center gap-1.5 text-[11px] font-semibold text-[var(--color-primary)]">
-          <FaCheck className="h-3 w-3" />
-          Match finished
-        </p>
       )}
     </article>
   );

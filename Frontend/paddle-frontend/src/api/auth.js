@@ -9,6 +9,7 @@ export const register = (data) => {
 };
 
 export const getMyProfile = () => api.get("users/me");
+export const getLeaderboard = () => api.get("users/leaderboard");
 export const updateMyProfile = (data) => api.patch("users/me", data);
 export const updateMyAvatar = (formData) =>
   api.post("users/me/avatar", formData, {

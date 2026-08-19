@@ -19,6 +19,7 @@ import {
   PAKISTAN_CITIES,
   PAKISTAN_PROVINCES,
 } from "../../constants/pakistanCities";
+import { sanitizeFullName, sanitizePhone } from "../../utils/authFields";
 
 const WEEK_DAYS = [
   { value: "MON", label: "Monday" },
@@ -294,7 +295,12 @@ export default function OwnerRefereesPanel() {
               label="Full name"
               required
               value={form.fullName}
-              onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  fullName: sanitizeFullName(e.target.value),
+                }))
+              }
             />
             <Field
               label="Email"
@@ -307,8 +313,12 @@ export default function OwnerRefereesPanel() {
               label="Phone number"
               required
               value={form.phoneNumber}
+              inputMode="tel"
               onChange={(e) =>
-                setForm((f) => ({ ...f, phoneNumber: e.target.value }))
+                setForm((f) => ({
+                  ...f,
+                  phoneNumber: sanitizePhone(e.target.value),
+                }))
               }
             />
             <Field

@@ -62,6 +62,12 @@ export class MatchesController {
   }
 
   @UseGuards(JwtAuthGuard, UserGuard)
+  @Get('calendar')
+  listCalendar(@Req() req: { user: { userId: number } }) {
+    return this.matches.listCalendarEvents(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard, UserGuard)
   @Get('live')
   listLive() {
     return this.matches.listLive();
@@ -71,6 +77,12 @@ export class MatchesController {
   @Get('results')
   listResults() {
     return this.matches.listResults();
+  }
+
+  @UseGuards(JwtAuthGuard, UserGuard)
+  @Get('history')
+  listHistory(@Req() req: { user: { userId: number } }) {
+    return this.matches.listHistoryForUser(req.user.userId);
   }
 
   @UseGuards(JwtAuthGuard, UserGuard)
@@ -89,6 +101,42 @@ export class MatchesController {
     @Req() req: { user: { userId: number } },
   ) {
     return this.matches.findOneForUser(req.user.userId, id);
+  }
+
+  @UseGuards(JwtAuthGuard, UserGuard)
+  @Post(':id/remind')
+  remind(
+    @Param('id') id: string,
+    @Req() req: { user: { userId: number } },
+  ) {
+    return this.matches.toggleWatch(req.user.userId, id, 'remind', true);
+  }
+
+  @UseGuards(JwtAuthGuard, UserGuard)
+  @Delete(':id/remind')
+  unremind(
+    @Param('id') id: string,
+    @Req() req: { user: { userId: number } },
+  ) {
+    return this.matches.toggleWatch(req.user.userId, id, 'remind', false);
+  }
+
+  @UseGuards(JwtAuthGuard, UserGuard)
+  @Post(':id/calendar')
+  addCalendar(
+    @Param('id') id: string,
+    @Req() req: { user: { userId: number } },
+  ) {
+    return this.matches.toggleWatch(req.user.userId, id, 'onCalendar', true);
+  }
+
+  @UseGuards(JwtAuthGuard, UserGuard)
+  @Delete(':id/calendar')
+  removeCalendar(
+    @Param('id') id: string,
+    @Req() req: { user: { userId: number } },
+  ) {
+    return this.matches.toggleWatch(req.user.userId, id, 'onCalendar', false);
   }
 
   @UseGuards(JwtAuthGuard, UserGuard)

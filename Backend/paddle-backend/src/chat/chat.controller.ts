@@ -52,6 +52,12 @@ export class ChatController {
   }
 
   @UseGuards(JwtAuthGuard, UserGuard)
+  @Get('unread-count')
+  unreadCount(@Req() req: { user: { userId: number } }) {
+    return this.chatService.unreadCount(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard, UserGuard)
   @Get('groups')
   findAllForUser(@Req() req: { user: { userId: number } }) {
     return this.chatService.findAllForUser(req.user.userId);

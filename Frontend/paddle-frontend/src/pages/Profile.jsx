@@ -20,6 +20,8 @@ import {
   updateMyAvatar,
   updateMyProfile,
 } from "../api/auth";
+import { getMatchHistory } from "../api/matches";
+import MatchResultCard from "../components/MatchResultCard";
 import {
   PAKISTAN_CITIES,
   PAKISTAN_PROVINCES,
@@ -63,12 +65,17 @@ export default function Profile() {
     confirmPassword: "",
   });
   const [savingPassword, setSavingPassword] = useState(false);
+  const [matchHistory, setMatchHistory] = useState([]);
 
   const load = async () => {
     setLoading(true);
     setError("");
     try {
-      const { data } = await getMyProfile();
+      const [{ data }, historyRes] = await Promise.all([
+        getMyProfile(),
+        getMatchHistory().catch(() => ({ data: [] })),
+      ]);
+      setMatchHistory(Array.isArray(historyRes.data) ? historyRes.data : []);
       setProfile(data);
       setPersonal({
         fullName: data.fullName || "",
@@ -312,6 +319,31 @@ export default function Profile() {
                   icon={FaTrophy}
                 />
               </div>
+            </section>
+
+            <section className="space-y-3 rounded-2xl border border-white/10 bg-[var(--color-surface)] p-4">
+              <div className="flex items-center gap-2">
+                <FaTrophy className="h-3.5 w-3.5 text-[var(--color-primary)]" />
+                <h2 className="text-sm font-semibold text-white">
+                  Match history
+                </h2>
+              </div>
+              <p className="text-[11px] text-white/35">
+                Completed matches you played, with results.
+              </p>
+              {matchHistory.length === 0 ? (
+                <p className="text-sm text-white/40">
+                  No completed matches yet.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {matchHistory.map((match) => (
+                    <li key={match.id}>
+                      <MatchResultCard match={match} />
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
 
             {/* Personal details */}

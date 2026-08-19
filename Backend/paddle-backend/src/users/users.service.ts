@@ -22,6 +22,24 @@ export class UsersService {
     });
   }
 
+  async listLeaderboard() {
+    const players = await this.prisma.user.findMany({
+      select: {
+        id: true,
+        fullName: true,
+        profileImage: true,
+        location: true,
+        points: true,
+        wins: true,
+      },
+      orderBy: [{ points: 'desc' }, { wins: 'desc' }, { fullName: 'asc' }],
+    });
+    return players.map((player, index) => ({
+      ...player,
+      listRank: index + 1,
+    }));
+  }
+
   async getProfile(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

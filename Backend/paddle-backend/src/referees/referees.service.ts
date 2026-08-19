@@ -58,9 +58,9 @@ export class RefereesService {
 
     const referee = await this.prisma.referee.create({
       data: {
-        fullName: dto.fullName.trim(),
+        fullName: dto.fullName?.trim() || '',
         email,
-        phoneNumber: dto.phoneNumber.trim(),
+        phoneNumber: dto.phoneNumber?.trim() || '',
         password: passwordHash,
         profileImage,
         location: dto.location?.trim() || undefined,

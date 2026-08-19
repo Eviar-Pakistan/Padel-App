@@ -56,15 +56,17 @@ function parseIdArray(value: unknown): string[] | undefined {
 }
 
 export class CreateRefereeDto {
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  fullName!: string;
+  fullName?: string;
 
   @IsEmail()
   email!: string;
 
+  @IsOptional()
   @IsString()
-  phoneNumber!: string;
+  phoneNumber?: string;
 
   @IsString()
   @MinLength(4)

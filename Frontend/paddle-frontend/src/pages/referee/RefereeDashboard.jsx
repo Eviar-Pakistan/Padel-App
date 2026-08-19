@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaCheck,
   FaClipboardCheck,
@@ -28,6 +28,7 @@ import {
   PAKISTAN_CITIES,
   PAKISTAN_PROVINCES,
 } from "../../constants/pakistanCities";
+import { sanitizeFullName, sanitizePhone } from "../../utils/authFields";
 
 const WEEK_DAYS = [
   { value: "MON", label: "Monday" },
@@ -120,7 +121,8 @@ function RefereeBottomNav({ active, onChange, chatUnread = 0 }) {
 
 export default function RefereeDashboard() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState("home");
+  const location = useLocation();
+  const [tab, setTab] = useState(location.state?.tab || "home");
   const [referee, setReferee] = useState(null);
   const [courts, setCourts] = useState([]);
   const [form, setForm] = useState({});
@@ -170,6 +172,22 @@ export default function RefereeDashboard() {
     setConversations(Array.isArray(cRes.data) ? cRes.data : []);
   }, []);
 
+  const refreshConversations = useCallback(async () => {
+    try {
+      const { data } = await getRefereeMatchConversations();
+      setConversations(Array.isArray(data) ? data : []);
+    } catch {
+      // keep existing list
+    }
+  }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      refreshConversations();
+    }, 4000);
+    return () => clearInterval(t);
+  }, [refreshConversations]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -204,6 +222,14 @@ export default function RefereeDashboard() {
     () => matches.filter((m) => m.refereeInviteStatus === "ACCEPTED"),
     [matches]
   );
+  const chatUnreadConversations = useMemo(
+    () =>
+      conversations.filter((c) => {
+        if (activeChatId && c.id === activeChatId) return false;
+        return Number(c.unreadCount) > 0;
+      }).length,
+    [conversations, activeChatId]
+  );
 
   const respond = async (id, accept) => {
     setActingId(id);
@@ -224,6 +250,9 @@ export default function RefereeDashboard() {
 
   useEffect(() => {
     if (!activeChatId) return undefined;
+    setConversations((prev) =>
+      prev.map((c) => (c.id === activeChatId ? { ...c, unreadCount: 0 } : c))
+    );
     getRefereeMatchMessages(activeChatId)
       .then(({ data }) => setMessages(Array.isArray(data) ? data : []))
       .catch(() => setMessages([]));
@@ -331,7 +360,10 @@ export default function RefereeDashboard() {
           }}
           messages={messages}
           me={{ kind: "referee", id: meId }}
-          onBack={() => setActiveChatId("")}
+          onBack={() => {
+            setActiveChatId("");
+            refreshConversations();
+          }}
           onSend={onSend}
           sending={sending}
         />
@@ -370,6 +402,21 @@ export default function RefereeDashboard() {
 
         {tab === "home" && (
           <div className="space-y-4">
+            {!referee?.fullName?.trim() && (
+              <button
+                type="button"
+                onClick={() => setTab("profile")}
+                className="w-full rounded-2xl border border-[var(--color-primary)]/35 bg-[var(--color-primary)]/10 px-4 py-3 text-left"
+              >
+                <p className="text-sm font-semibold text-white">
+                  Complete your profile
+                </p>
+                <p className="mt-1 text-xs text-white/50">
+                  Add your name, photo, location, and courts so you can be
+                  assigned to matches.
+                </p>
+              </button>
+            )}
             <h1 className="text-lg font-bold">Match requests</h1>
             {pending.length === 0 ? (
               <p className="text-sm text-white/40">No pending referee requests.</p>
@@ -426,7 +473,9 @@ export default function RefereeDashboard() {
                       {m.lifecycle === "LIVE" ? " · LIVE" : ""}
                       {m.score?.finished ? " · Finished" : ""}
                     </p>
-                    {m.refereeInviteStatus === "ACCEPTED" && !m.score?.finished && (
+                    {m.refereeInviteStatus === "ACCEPTED" &&
+                      m.lifecycle === "LIVE" &&
+                      !m.score?.finished && (
                       <button
                         type="button"
                         onClick={() => navigate(`/referee/matches/${m.id}`)}
@@ -434,6 +483,11 @@ export default function RefereeDashboard() {
                       >
                         Score live match
                       </button>
+                    )}
+                    {m.lifecycle === "COMPLETED" && !m.score?.finished && (
+                      <p className="mt-2 text-[11px] font-semibold text-white/45">
+                        Match time ended · scoring closed
+                      </p>
                     )}
                     {m.score?.finished && (
                       <p className="mt-2 text-[11px] font-semibold text-[var(--color-primary)]">
@@ -457,27 +511,45 @@ export default function RefereeDashboard() {
               </p>
             ) : (
               <ul className="mt-3 divide-y divide-white/5">
-                {conversations.map((c) => (
+                {conversations.map((c) => {
+                  const unread = Number(c.unreadCount) || 0;
+                  return (
                   <li key={c.id}>
                     <button
                       type="button"
                       onClick={() => setActiveChatId(c.id)}
                       className="flex w-full items-center gap-3 py-3 text-left"
                     >
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-[var(--color-primary)]">
+                      <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-[var(--color-primary)]">
                         <FaClipboardCheck className="h-5 w-5" />
                       </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={`truncate text-sm ${
+                            unread > 0 ? "font-bold text-white" : "font-semibold"
+                          }`}
+                        >
                           {c.title || c.court?.name || "Match"}
                         </p>
-                        <p className="truncate text-xs text-white/45">
+                        <p
+                          className={`truncate text-xs ${
+                            unread > 0
+                              ? "font-medium text-white/80"
+                              : "text-white/45"
+                          }`}
+                        >
                           {lastPreview(c)}
                         </p>
                       </div>
+                      {unread > 0 && (
+                        <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)] px-1.5 text-[10px] font-bold text-[var(--color-background)]">
+                          {unread > 99 ? "99+" : unread}
+                        </span>
+                      )}
                     </button>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -486,7 +558,8 @@ export default function RefereeDashboard() {
         {tab === "profile" && (
           <>
             <p className="mb-4 text-sm text-white/50">
-              Set when and where you are available to officiate matches.
+              Add your name, availability, and courts. You can update this
+              anytime.
             </p>
             <form onSubmit={save} className="space-y-3">
               <div className="flex items-center gap-3">
@@ -523,7 +596,12 @@ export default function RefereeDashboard() {
                 Full name
                 <input
                   value={form.fullName || ""}
-                  onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      fullName: sanitizeFullName(e.target.value),
+                    }))
+                  }
                   className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
                 />
               </label>
@@ -540,8 +618,12 @@ export default function RefereeDashboard() {
                 Phone number
                 <input
                   value={form.phoneNumber || ""}
+                  inputMode="tel"
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, phoneNumber: e.target.value }))
+                    setForm((f) => ({
+                      ...f,
+                      phoneNumber: sanitizePhone(e.target.value),
+                    }))
                   }
                   className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
                 />
@@ -652,6 +734,7 @@ export default function RefereeDashboard() {
 
       <RefereeBottomNav
         active={tab}
+        chatUnread={chatUnreadConversations}
         onChange={(id) => {
           setActiveChatId("");
           setTab(id);

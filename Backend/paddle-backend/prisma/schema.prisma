@@ -59,6 +59,7 @@ model User {
   matchParticipations MatchParticipant[]
   matchJoinRequests MatchJoinRequest[]
   matchChatMessages MatchChatMessage[]
+  matchWatches      MatchWatch[]
 }
 
 model PaddleOwner {
@@ -643,6 +644,8 @@ model UserConversation {
   id          String                     @id @default(uuid())
   userLowId   Int
   userHighId  Int
+  userLowLastReadAt  DateTime?
+  userHighLastReadAt DateTime?
   userLow     User                       @relation("PlayerConvLow", fields: [userLowId], references: [id], onDelete: Cascade)
   userHigh    User                       @relation("PlayerConvHigh", fields: [userHighId], references: [id], onDelete: Cascade)
   challenge   PlayerChallenge?
@@ -704,6 +707,7 @@ model ChatGroupMember {
   id       String    @id @default(uuid())
   groupId  String
   userId   Int
+  lastReadAt DateTime?
   group    ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   joinedAt DateTime  @default(now())
@@ -775,6 +779,7 @@ model Match {
   scoreLogJson         String             @default("[]")
   winnerTeam           Int?
   rewardsApplied       Boolean            @default(false)
+  refereeLastReadAt    DateTime?
   host                 User               @relation("MatchHost", fields: [hostUserId], references: [id], onDelete: Cascade)
   court                Court              @relation(fields: [courtId], references: [id], onDelete: Cascade)
   booking              CourtBooking       @relation(fields: [courtBookingId], references: [id], onDelete: Cascade)
@@ -782,6 +787,7 @@ model Match {
   participants         MatchParticipant[]
   joinRequests         MatchJoinRequest[]
   messages             MatchChatMessage[]
+  watches              MatchWatch[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
@@ -789,6 +795,24 @@ model Match {
   @@index([courtId])
   @@index([bookingDate])
   @@index([refereeId])
+}
+
+model MatchWatch {
+  id          String    @id @default(uuid())
+  userId      Int
+  matchId     String
+  remind      Boolean   @default(false)
+  onCalendar  Boolean   @default(false)
+  notifiedAt  DateTime?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match       Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, matchId])
+  @@index([userId])
+  @@index([matchId])
+  @@index([remind, notifiedAt])
 }
 
 model MatchParticipant {
@@ -799,6 +823,7 @@ model MatchParticipant {
   /// 0 = host team (left), 1 = other team (right)
   team      Int               @default(0)
   status    MatchInviteStatus @default(PENDING)
+  lastReadAt DateTime?
   match     Match             @relation(fields: [matchId], references: [id], onDelete: Cascade)
   user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime          @default(now())

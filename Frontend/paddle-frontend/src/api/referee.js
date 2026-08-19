@@ -14,10 +14,7 @@ refereeApi.interceptors.request.use((config) => {
 
 export default refereeApi;
 
-export const refereeRegister = (formData) =>
-  refereeApi.post("referees/register", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+export const refereeRegister = (data) => refereeApi.post("referees/register", data);
 export const refereeLogin = (data) => refereeApi.post("referees/login", data);
 export const getRefereeMe = () => refereeApi.get("referees/me");
 export const updateRefereeMe = (formData) =>

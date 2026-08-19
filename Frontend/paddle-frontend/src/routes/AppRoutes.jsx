@@ -33,12 +33,15 @@ import Coaches from "../pages/Coaches";
 import CoachDetails from "../pages/CoachDetails";
 import Chat from "../pages/Chat";
 import TopPlayers from "../pages/TopPlayers";
+import Leaderboard from "../pages/Leaderboard";
 import PadelInfo from "../pages/PadelInfo";
 import Matches from "../pages/Matches";
 import InitiateMatch from "../pages/InitiateMatch";
 import MatchLive from "../pages/MatchLive";
 import LiveMatches from "../pages/LiveMatches";
+import LiveMatch from "../pages/LiveMatch";
 import MatchResults from "../pages/MatchResults";
+import Calendar from "../pages/Calendar";
 
 export default function AppRoutes() {
   return (
@@ -161,6 +164,14 @@ export default function AppRoutes() {
               }
             />
             <Route
+              path="/leaderboard"
+              element={
+                <ProtectedRoute>
+                  <Leaderboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/info"
               element={
                 <ProtectedRoute>
@@ -193,10 +204,26 @@ export default function AppRoutes() {
               }
             />
             <Route
+              path="/calendar"
+              element={
+                <ProtectedRoute>
+                  <Calendar />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/live"
               element={
                 <ProtectedRoute>
                   <LiveMatches />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/live/:id"
+              element={
+                <ProtectedRoute>
+                  <LiveMatch />
                 </ProtectedRoute>
               }
             />

@@ -210,6 +210,14 @@ export function formatSets(sets: SetScore[]) {
   return sets.map((s) => `${s.a}-${s.b}`).join(', ');
 }
 
+export function formatMatchScore(state: ScoreState) {
+  const parts = (state.sets || []).map((s) => `${s.a}-${s.b}`);
+  if ((state.gameA || state.gameB) && state.winnerTeam == null) {
+    parts.push(`${state.gameA}-${state.gameB}`);
+  }
+  return parts.join(', ');
+}
+
 export function eventBanner(
   state: ScoreState,
   teamNames: [string, string],
@@ -254,7 +262,7 @@ export function publicScoreView(
     ...state,
     pointsLabelA: state.isTieBreak ? String(state.tieA) : pointLabel(state.pointA),
     pointsLabelB: state.isTieBreak ? String(state.tieB) : pointLabel(state.pointB),
-    setsLabel: formatSets(state.sets),
+    setsLabel: formatMatchScore(state),
     event: eventBanner(state, teamNames),
     finished: state.winnerTeam != null,
   };
@@ -262,4 +270,19 @@ export function publicScoreView(
 
 export function rankFromPoints(points: number) {
   return Math.floor(Math.max(0, points) / 100);
+}
+
+/** Official winner, or the team ahead when the slot ends. */
+export function winnerFromScore(
+  state: ScoreState,
+  allowLead = false,
+): TeamIndex | null {
+  if (state.winnerTeam === 0 || state.winnerTeam === 1) return state.winnerTeam;
+  if (!allowLead) return null;
+  if (state.setA !== state.setB) return state.setA > state.setB ? 0 : 1;
+  if (state.gameA !== state.gameB) return state.gameA > state.gameB ? 0 : 1;
+  const ptsA = state.isTieBreak ? state.tieA : state.pointA;
+  const ptsB = state.isTieBreak ? state.tieB : state.pointB;
+  if (ptsA !== ptsB) return ptsA > ptsB ? 0 : 1;
+  return null;
 }

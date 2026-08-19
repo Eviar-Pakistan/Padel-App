@@ -51,3 +51,55 @@ export const PAKISTAN_CITIES = [
   "Sukkur",
   "Turbat",
 ].sort((a, b) => a.localeCompare(b));
+
+export const CITY_TO_PROVINCE = {
+  Abbottabad: "Khyber Pakhtunkhwa",
+  Attock: "Punjab",
+  Bahawalpur: "Punjab",
+  Bannu: "Khyber Pakhtunkhwa",
+  Chiniot: "Punjab",
+  "Dera Ghazi Khan": "Punjab",
+  "Dera Ismail Khan": "Khyber Pakhtunkhwa",
+  Faisalabad: "Punjab",
+  Gilgit: "Gilgit-Baltistan",
+  Gujranwala: "Punjab",
+  Gujrat: "Punjab",
+  Gwadar: "Balochistan",
+  Hyderabad: "Sindh",
+  Islamabad: "Islamabad Capital Territory",
+  Jacobabad: "Sindh",
+  Jhelum: "Punjab",
+  Karachi: "Sindh",
+  Kasur: "Punjab",
+  Kohat: "Khyber Pakhtunkhwa",
+  Lahore: "Punjab",
+  Larkana: "Sindh",
+  Mardan: "Khyber Pakhtunkhwa",
+  Mingora: "Khyber Pakhtunkhwa",
+  Mirpur: "Azad Jammu and Kashmir",
+  Multan: "Punjab",
+  Muzaffarabad: "Azad Jammu and Kashmir",
+  Muzaffargarh: "Punjab",
+  Nawabshah: "Sindh",
+  Okara: "Punjab",
+  Peshawar: "Khyber Pakhtunkhwa",
+  Quetta: "Balochistan",
+  "Rahim Yar Khan": "Punjab",
+  Rawalpindi: "Punjab",
+  Sahiwal: "Punjab",
+  Sargodha: "Punjab",
+  Sheikhupura: "Punjab",
+  Sialkot: "Punjab",
+  Sukkur: "Sindh",
+  Turbat: "Balochistan",
+};
+
+export function provinceForCity(city) {
+  const name = String(city || "").trim();
+  if (!name) return "";
+  if (CITY_TO_PROVINCE[name]) return CITY_TO_PROVINCE[name];
+  const match = Object.keys(CITY_TO_PROVINCE).find(
+    (c) => c.toLowerCase() === name.toLowerCase()
+  );
+  return match ? CITY_TO_PROVINCE[match] : "";
+}

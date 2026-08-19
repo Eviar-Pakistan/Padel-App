@@ -9,6 +9,20 @@ import {
 import { useMatchLiveSocket } from "../../hooks/useMatchLiveSocket";
 import { useAuthToken } from "../../hooks/useMatchLiveFeed";
 
+function matchTimeEnded(match) {
+  if (!match?.bookingDate || !match.endTime) {
+    return match?.lifecycle === "COMPLETED";
+  }
+  const key = String(match.bookingDate).slice(0, 10);
+  const [y, mo, d] = key.split("-").map(Number);
+  const [eh, em = 0] = String(match.endTime).split(":").map(Number);
+  const [sh, sm = 0] = String(match.startTime || "00:00").split(":").map(Number);
+  const start = new Date(y, mo - 1, d, sh, sm, 0, 0);
+  let end = new Date(y, mo - 1, d, eh, em, 0, 0);
+  if (end <= start) end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+  return Date.now() >= end.getTime();
+}
+
 const ACTIONS = [
   { kind: "POINT", label: "Point" },
   { kind: "ACE", label: "Ace" },
@@ -24,6 +38,12 @@ export default function RefereeScore() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(t);
+  }, []);
 
   const load = () =>
     getRefereeMatch(id)
@@ -48,8 +68,11 @@ export default function RefereeScore() {
 
   const { left, right } = teamsFromMatch(match);
   const finished = Boolean(match?.score?.finished);
+  const timeEnded = matchTimeEnded(match) || match?.lifecycle === "COMPLETED";
+  const canScore = Boolean(match) && match.lifecycle === "LIVE" && !finished && !timeEnded;
 
   const send = async (kind, team) => {
+    if (!canScore) return;
     setBusy(true);
     setError("");
     try {
@@ -96,6 +119,14 @@ export default function RefereeScore() {
             {finished ? (
               <p className="rounded-2xl border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-4 py-3 text-center text-sm font-semibold text-[var(--color-primary)]">
                 Match complete. Winning team received +1 win and +50 points each.
+              </p>
+            ) : timeEnded ? (
+              <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white/70">
+                Match time has ended. Scoring is closed.
+              </p>
+            ) : !canScore ? (
+              <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white/70">
+                Scoring opens when the match goes live.
               </p>
             ) : (
               <>
