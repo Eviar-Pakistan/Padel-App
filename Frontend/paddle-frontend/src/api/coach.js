@@ -15,6 +15,7 @@ coachApi.interceptors.request.use((config) => {
 export default coachApi;
 
 export const coachLogin = (data) => coachApi.post("coaches/login", data);
+export const coachRegister = (data) => coachApi.post("coaches/register", data);
 export const getCoachMe = () => coachApi.get("coaches/me");
 export const updateCoachMe = (formData) =>
   coachApi.patch("coaches/me", formData, {

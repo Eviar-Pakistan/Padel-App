@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { StaffGuard } from '../auth/staff.guard';
 import { RefereeGuard } from '../auth/referee.guard';
 import { Roles } from '../auth/roles';
+import { AccountCreatedBy } from '../../generated/prisma/client';
 import { RefereesService } from './referees.service';
 import { CreateRefereeDto } from './dto/create-referee.dto';
 import { UpdateRefereeDto } from './dto/update-referee.dto';
@@ -77,7 +78,12 @@ export class RefereesController {
   ) {
     const paddleOwnerId =
       req.user?.role === Roles.PADDLE_OWNER ? req.user.userId : undefined;
-    return this.refereesService.create(dto, profileImage, paddleOwnerId);
+    return this.refereesService.create(
+      dto,
+      profileImage,
+      paddleOwnerId,
+      AccountCreatedBy.ADMIN,
+    );
   }
 
   @UseGuards(JwtAuthGuard, StaffGuard)

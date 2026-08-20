@@ -15,6 +15,7 @@ import OwnerLogin from "../pages/owner/OwnerLogin";
 import OwnerDashboard from "../pages/owner/OwnerDashboard";
 import OwnerProductDetails from "../pages/owner/OwnerProductDetails";
 import CoachLogin from "../pages/coach/CoachLogin";
+import CoachRegister from "../pages/coach/CoachRegister";
 import CoachDashboard from "../pages/coach/CoachDashboard";
 import RefereeLogin from "../pages/referee/RefereeLogin";
 import RefereeRegister from "../pages/referee/RefereeRegister";
@@ -265,6 +266,7 @@ export default function AppRoutes() {
             />
 
             <Route path="/coach/login" element={<CoachLogin />} />
+            <Route path="/coach/register" element={<CoachRegister />} />
             <Route
               path="/coach"
               element={

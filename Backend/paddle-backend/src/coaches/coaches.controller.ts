@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { BookingStatus } from '../../generated/prisma/client';
+import { BookingStatus, AccountCreatedBy } from '../../generated/prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserGuard } from '../auth/user.guard';
 import { StaffGuard } from '../auth/staff.guard';
@@ -47,6 +47,11 @@ export class CoachesController {
   @Post('login')
   login(@Body() dto: CoachLoginDto) {
     return this.coachesService.login(dto);
+  }
+
+  @Post('register')
+  register(@Body() dto: CreateCoachDto) {
+    return this.coachesService.create(dto);
   }
 
   @UseGuards(JwtAuthGuard, CoachGuard)
@@ -151,7 +156,12 @@ export class CoachesController {
   ) {
     const paddleOwnerId =
       req.user?.role === Roles.PADDLE_OWNER ? req.user.userId : undefined;
-    return this.coachesService.create(dto, profileImage, paddleOwnerId);
+    return this.coachesService.create(
+      dto,
+      profileImage,
+      paddleOwnerId,
+      AccountCreatedBy.ADMIN,
+    );
   }
 
   @Get()

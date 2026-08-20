@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { BookingStatus, ChatMessageType, Prisma, WeekDay } from '../../generated/prisma/client';
+import { BookingStatus, ChatMessageType, Prisma, WeekDay, AccountCreatedBy } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImageUploadService } from '../common/image-upload.service';
 import { ChatMediaService } from '../chat/chat-media.service';
@@ -98,16 +98,23 @@ export class CoachesService {
     dto: CreateCoachDto,
     file?: Express.Multer.File,
     paddleOwnerId?: number,
+    createdBy: AccountCreatedBy = AccountCreatedBy.SELF,
   ) {
+    const email = dto.email.trim().toLowerCase();
+    const existing = await this.prisma.coach.findUnique({ where: { email } });
+    if (existing) {
+      throw new ConflictException('Email already registered');
+    }
+
     const profileImage = await this.imageUpload.saveProfileImage(file);
     const passwordHash = await bcrypt.hash(dto.password, 10);
     const coach = await this.prisma.coach.create({
       data: {
-        firstName: dto.firstName,
-        lastName: dto.lastName,
+        firstName: dto.firstName?.trim() || '',
+        lastName: dto.lastName?.trim() || '',
         profileImage,
-        email: dto.email.trim().toLowerCase(),
-        phoneNumber: dto.phoneNumber,
+        email,
+        phoneNumber: dto.phoneNumber?.trim() || '',
         password: passwordHash,
         gender: dto.gender,
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
@@ -128,6 +135,7 @@ export class CoachesService {
         availableToTime: dto.availableToTime,
         isVerified: dto.isVerified ?? false,
         status: dto.status,
+        createdBy,
         ...(paddleOwnerId ? { paddleOwnerId } : {}),
       },
     });

@@ -4,12 +4,13 @@ import { FaCheck, FaChevronDown, FaSearch } from "react-icons/fa";
 /**
  * @param {{
  *   label?: string;
- *   value: string;
- *   onChange: (value: string) => void;
+ *   value: string | string[];
+ *   onChange: (value: string | string[]) => void;
  *   options: Array<string | { value: string; label: string }>;
  *   placeholder?: string;
  *   searchable?: boolean;
  *   searchPlaceholder?: string;
+ *   multiple?: boolean;
  *   className?: string;
  * }} props
  */
@@ -23,6 +24,7 @@ export default function CustomSelect({
   searchPlaceholder = "Search...",
   allowEmpty = true,
   required = false,
+  multiple = false,
   icon: Icon,
   className = "",
 }) {
@@ -40,8 +42,20 @@ export default function CustomSelect({
     [options]
   );
 
-  const selected = normalized.find((o) => String(o.value) === String(value));
-  const display = selected?.label || "";
+  const selectedValues = useMemo(() => {
+    if (!multiple) return [];
+    return Array.isArray(value) ? value.map(String) : [];
+  }, [multiple, value]);
+
+  const selected = multiple
+    ? null
+    : normalized.find((o) => String(o.value) === String(value));
+  const display = multiple
+    ? selectedValues
+        .map((v) => normalized.find((o) => String(o.value) === v)?.label || v)
+        .filter(Boolean)
+        .join(", ")
+    : selected?.label || "";
 
   const filtered = useMemo(() => {
     if (!searchable || !query.trim()) return normalized;
@@ -72,7 +86,20 @@ export default function CustomSelect({
     }
   }, [open, searchable]);
 
+  const isActive = (optValue) =>
+    multiple
+      ? selectedValues.includes(String(optValue))
+      : String(optValue) === String(value);
+
   const pick = (next) => {
+    if (multiple) {
+      const key = String(next);
+      const nextValues = selectedValues.includes(key)
+        ? selectedValues.filter((v) => v !== key)
+        : [...selectedValues, key];
+      onChange(nextValues);
+      return;
+    }
     onChange(next);
     setOpen(false);
   };
@@ -119,6 +146,7 @@ export default function CustomSelect({
         <div
           id={listId}
           role="listbox"
+          aria-multiselectable={multiple || undefined}
           className="absolute left-0 right-0 z-30 mt-1.5 overflow-hidden rounded-xl border border-white/10 bg-[#152230] shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
         >
           {searchable && (
@@ -136,7 +164,7 @@ export default function CustomSelect({
           )}
 
           <ul className="max-h-56 overflow-y-auto py-1">
-            {allowEmpty && (
+            {allowEmpty && !multiple && (
               <li>
                 <button
                   type="button"
@@ -157,7 +185,7 @@ export default function CustomSelect({
               <li className="px-3 py-3 text-sm text-white/35">No matches</li>
             ) : (
               filtered.map((opt) => {
-                const active = String(opt.value) === String(value);
+                const active = isActive(opt.value);
                 return (
                   <li key={opt.value}>
                     <button

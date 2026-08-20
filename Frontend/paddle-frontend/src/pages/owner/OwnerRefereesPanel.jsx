@@ -521,7 +521,20 @@ export default function OwnerRefereesPanel() {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold text-white">{ref.fullName}</p>
+                      <p className="flex flex-wrap items-center gap-2 font-semibold text-white">
+                        <span>{ref.fullName?.trim() || ref.email}</span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                            ref.createdBy === "ADMIN"
+                              ? "bg-[var(--color-secondary)]/20 text-sky-300"
+                              : "bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+                          }`}
+                        >
+                          {ref.createdBy === "ADMIN"
+                            ? "Created by admin"
+                            : "Self registered"}
+                        </span>
+                      </p>
                       <p className="mt-1 text-sm text-[var(--color-muted)]">
                         {ref.email} · {ref.phoneNumber}
                       </p>

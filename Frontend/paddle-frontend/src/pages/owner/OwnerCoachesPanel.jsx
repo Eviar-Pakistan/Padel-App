@@ -16,6 +16,7 @@ import {
 } from "../../api/owner";
 import CustomSelect from "../../components/CustomSelect";
 import PasswordToggleButton from "../../components/PasswordToggleButton";
+import { sanitizeFullName, sanitizePhone } from "../../utils/authFields";
 
 const GENDER_OPTIONS = [
   { value: "MALE", label: "Male" },
@@ -39,6 +40,50 @@ const CERT_OPTIONS = [
   { value: "Level 3", label: "Level 3" },
 ];
 
+const LANGUAGE_OPTIONS = [
+  { value: "English", label: "English" },
+  { value: "Urdu", label: "Urdu" },
+  { value: "Punjabi", label: "Punjabi" },
+  { value: "Sindhi", label: "Sindhi" },
+  { value: "Pashto", label: "Pashto" },
+  { value: "Saraiki", label: "Saraiki" },
+  { value: "Balochi", label: "Balochi" },
+  { value: "Spanish", label: "Spanish" },
+  { value: "Arabic", label: "Arabic" },
+];
+
+const PADEL_SPECIALTIES = [
+  { value: "Beginners", label: "Beginners" },
+  { value: "Intermediate", label: "Intermediate" },
+  { value: "Advanced / Competition", label: "Advanced / Competition" },
+  { value: "Kids & Juniors", label: "Kids & Juniors" },
+  { value: "Women's Padel", label: "Women's Padel" },
+  { value: "Serve & Return", label: "Serve & Return" },
+  { value: "Volleys", label: "Net / Volleys" },
+  { value: "Bandeja & Víbora", label: "Bandeja & Víbora" },
+  { value: "Smash", label: "Smash" },
+  { value: "Footwork & Movement", label: "Footwork & Movement" },
+  { value: "Doubles Tactics", label: "Doubles Tactics" },
+  { value: "Match Play", label: "Match Play" },
+  { value: "Fitness & Conditioning", label: "Fitness & Conditioning" },
+  { value: "Mental Game", label: "Mental Game" },
+];
+
+function asStringList(value) {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === "string" && value.trim()) {
+    return value.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function mergeOptions(base, selected) {
+  const extra = selected
+    .filter((v) => !base.some((o) => o.value === v))
+    .map((v) => ({ value: v, label: v }));
+  return extra.length ? [...extra, ...base] : base;
+}
+
 const WEEK_DAYS = [
   { value: "MON", label: "Monday" },
   { value: "TUE", label: "Tuesday" },
@@ -52,9 +97,16 @@ const WEEK_DAYS = [
 const DAY_LABEL = Object.fromEntries(WEEK_DAYS.map((d) => [d.value, d.label]));
 const BIO_MAX = 500;
 
+function splitFullName(value) {
+  const parts = String(value).trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || "",
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
 const emptyForm = {
-  firstName: "",
-  lastName: "",
+  fullName: "",
   email: "",
   phoneNumber: "",
   password: "",
@@ -63,8 +115,8 @@ const emptyForm = {
   yearsOfExperience: "",
   sessionRate: "",
   certificationLevel: "",
-  specialties: "",
-  languages: "",
+  specialties: [],
+  languages: [],
   availableFromDay: "MON",
   availableToDay: "THU",
   availableFromTime: "",
@@ -213,8 +265,7 @@ export default function OwnerCoachesPanel() {
   const startEdit = (coach) => {
     setEditingId(coach.id);
     setForm({
-      firstName: coach.firstName || "",
-      lastName: coach.lastName || "",
+      fullName: [coach.firstName, coach.lastName].filter(Boolean).join(" "),
       email: coach.email || "",
       phoneNumber: coach.phoneNumber || "",
       password: "",
@@ -224,10 +275,8 @@ export default function OwnerCoachesPanel() {
         coach.yearsOfExperience != null ? String(coach.yearsOfExperience) : "",
       sessionRate: coach.sessionRate != null ? String(coach.sessionRate) : "",
       certificationLevel: coach.certificationLevel || "",
-      specialties: Array.isArray(coach.specialties)
-        ? coach.specialties.join(", ")
-        : "",
-      languages: Array.isArray(coach.languages) ? coach.languages.join(", ") : "",
+      specialties: asStringList(coach.specialties),
+      languages: asStringList(coach.languages),
       availableFromDay: coach.availableFromDay || "MON",
       availableToDay: coach.availableToDay || "THU",
       availableFromTime: coach.availableFromTime || "",
@@ -276,8 +325,12 @@ export default function OwnerCoachesPanel() {
     setMessage("");
     try {
       const formData = new FormData();
-      formData.append("firstName", form.firstName.trim());
-      formData.append("lastName", form.lastName.trim());
+      const { firstName, lastName } = splitFullName(form.fullName);
+      if (!firstName) {
+        throw new Error("Full name is required.");
+      }
+      formData.append("firstName", firstName);
+      formData.append("lastName", lastName);
       formData.append("email", form.email.trim());
       formData.append("phoneNumber", form.phoneNumber.trim());
       if (form.password.trim()) {
@@ -298,27 +351,11 @@ export default function OwnerCoachesPanel() {
       if (form.sessionRate !== "") {
         formData.append("sessionRate", String(Number(form.sessionRate)));
       }
-      if (form.specialties.trim()) {
-        formData.append(
-          "specialties",
-          JSON.stringify(
-            form.specialties
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
-          )
-        );
+      if (form.specialties.length) {
+        formData.append("specialties", JSON.stringify(form.specialties));
       }
-      if (form.languages.trim()) {
-        formData.append(
-          "languages",
-          JSON.stringify(
-            form.languages
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
-          )
-        );
+      if (form.languages.length) {
+        formData.append("languages", JSON.stringify(form.languages));
       }
       formData.append("availableFromDay", form.availableFromDay);
       formData.append("availableToDay", form.availableToDay);
@@ -386,18 +423,16 @@ export default function OwnerCoachesPanel() {
           >
             <div className="grid gap-3 sm:grid-cols-2">
               <Field
-                label="First name"
+                label="Full name"
                 required
-                placeholder="Enter first name"
-                value={form.firstName}
-                onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
-              />
-              <Field
-                label="Last name"
-                required
-                placeholder="Enter last name"
-                value={form.lastName}
-                onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
+                placeholder="Enter full name"
+                value={form.fullName}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    fullName: sanitizeFullName(e.target.value),
+                  }))
+                }
               />
               <Field
                 label="Email address"
@@ -411,9 +446,15 @@ export default function OwnerCoachesPanel() {
                 label="Phone number"
                 required
                 prefix="+92"
+                inputMode="tel"
                 placeholder="Enter phone number"
                 value={form.phoneNumber}
-                onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    phoneNumber: sanitizePhone(e.target.value),
+                  }))
+                }
               />
               <Field
                 label={editingId ? "Login password (optional)" : "Login password"}
@@ -461,17 +502,23 @@ export default function OwnerCoachesPanel() {
                 placeholder="Select certification level"
                 options={certOptions}
               />
-              <Field
-                label="Languages (comma separated)"
-                placeholder="e.g. English, Spanish, Urdu"
+              <CustomSelect
+                label="Languages"
+                multiple
+                searchable
                 value={form.languages}
-                onChange={(e) => setForm((f) => ({ ...f, languages: e.target.value }))}
+                onChange={(v) => setForm((f) => ({ ...f, languages: v }))}
+                placeholder="Select languages"
+                options={mergeOptions(LANGUAGE_OPTIONS, form.languages)}
               />
-              <Field
-                label="Specialties (comma separated)"
-                placeholder="e.g. Technical, Match Play, Beginners"
+              <CustomSelect
+                label="Specialties"
+                multiple
+                searchable
                 value={form.specialties}
-                onChange={(e) => setForm((f) => ({ ...f, specialties: e.target.value }))}
+                onChange={(v) => setForm((f) => ({ ...f, specialties: v }))}
+                placeholder="Select padel specialties"
+                options={mergeOptions(PADEL_SPECIALTIES, form.specialties)}
               />
             </div>
           </SectionCard>
@@ -703,8 +750,22 @@ export default function OwnerCoachesPanel() {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold text-white">
-                        {coach.firstName} {coach.lastName}
+                      <p className="flex flex-wrap items-center gap-2 font-semibold text-white">
+                        <span>
+                          {(coach.firstName || coach.lastName || "").trim() ||
+                            coach.email}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                            coach.createdBy === "ADMIN"
+                              ? "bg-[var(--color-secondary)]/20 text-sky-300"
+                              : "bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+                          }`}
+                        >
+                          {coach.createdBy === "ADMIN"
+                            ? "Created by admin"
+                            : "Self registered"}
+                        </span>
                       </p>
                       <p className="mt-1 text-sm text-[var(--color-muted)]">
                         {coach.email} · {coach.phoneNumber}

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { Prisma } from '../../generated/prisma/client';
+import { Prisma, AccountCreatedBy } from '../../generated/prisma/client';
 import { ImageUploadService } from '../common/image-upload.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Roles } from '../auth/roles';
@@ -45,7 +45,7 @@ export class RefereesService {
     },
   };
 
-  async create(dto: CreateRefereeDto, file?: Express.Multer.File, paddleOwnerId?: number) {
+  async create(dto: CreateRefereeDto, file?: Express.Multer.File, paddleOwnerId?: number, createdBy: AccountCreatedBy = AccountCreatedBy.SELF) {
     const email = dto.email.trim().toLowerCase();
     const existing = await this.prisma.referee.findUnique({ where: { email } });
     if (existing) {
@@ -71,6 +71,7 @@ export class RefereesService {
         availableFromTime: dto.availableFromTime,
         availableToTime: dto.availableToTime,
         status: dto.status,
+        createdBy,
         ...(paddleOwnerId ? { paddleOwnerId } : {}),
         ...(courtIds.length
           ? { courts: { create: courtIds.map((courtId) => ({ courtId })) } }

@@ -209,6 +209,11 @@ enum CoachStatus {
   SUSPENDED
 }
 
+enum AccountCreatedBy {
+  SELF
+  ADMIN
+}
+
 enum WeekDay {
   MON
   TUE
@@ -244,6 +249,7 @@ model Coach {
   totalReviews       Int          @default(0)
   status             CoachStatus  @default(ACTIVE)
   password           String? // hashed; required for coach portal login
+  createdBy          AccountCreatedBy @default(SELF)
   paddleOwnerId      Int?
   paddleOwner        PaddleOwner? @relation(fields: [paddleOwnerId], references: [id], onDelete: SetNull)
   createdAt          DateTime     @default(now())
@@ -275,6 +281,7 @@ model Referee {
   availableFromTime String?
   availableToTime   String?
   status            RefereeStatus @default(ACTIVE)
+  createdBy         AccountCreatedBy @default(SELF)
   paddleOwnerId     Int?
   paddleOwner       PaddleOwner?  @relation(fields: [paddleOwnerId], references: [id], onDelete: SetNull)
   courts            RefereeCourt[]

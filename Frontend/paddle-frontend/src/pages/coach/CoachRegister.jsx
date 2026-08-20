@@ -2,9 +2,9 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FaEnvelope, FaLock, FaUserTie } from "react-icons/fa";
 import AuthInput from "../../components/AuthInput";
-import { coachLogin } from "../../api/coach";
+import { coachLogin, coachRegister } from "../../api/coach";
 
-export default function CoachLogin() {
+export default function CoachRegister() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,26 +16,29 @@ export default function CoachLogin() {
     setError("");
     setLoading(true);
     try {
+      const emailValue = email.trim().toLowerCase();
+      await coachRegister({
+        email: emailValue,
+        password,
+      });
       const { data } = await coachLogin({
-        email: email.trim(),
+        email: emailValue,
         password,
       });
       const token = data?.access_token || data?.accessToken;
       if (!token) {
-        setError("Login succeeded but no access token was returned.");
+        navigate("/coach/login");
         return;
       }
       localStorage.setItem("coachAccessToken", token);
       if (data.coach) {
         localStorage.setItem("coachProfile", JSON.stringify(data.coach));
       }
-      navigate("/coach");
+      navigate("/coach", { state: { tab: "profile" } });
     } catch (err) {
-      const message = err.response?.data?.message;
+      const msg = err.response?.data?.message;
       setError(
-        Array.isArray(message)
-          ? message.join(", ")
-          : message || "Coach login failed."
+        Array.isArray(msg) ? msg.join(", ") : msg || "Registration failed."
       );
     } finally {
       setLoading(false);
@@ -49,9 +52,10 @@ export default function CoachLogin() {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-primary)]/15">
             <FaUserTie className="h-7 w-7 text-[var(--color-primary)]" />
           </div>
-          <h1 className="text-2xl font-bold text-white">Coach Login</h1>
+          <h1 className="text-2xl font-bold text-white">Coach Register</h1>
           <p className="mt-2 text-sm text-[var(--color-muted)]">
-            Sign in to manage bookings, profile, and chats
+            Sign up with email and password. You can finish your profile after
+            you log in.
           </p>
         </div>
 
@@ -68,7 +72,7 @@ export default function CoachLogin() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="coach@email.com"
               required
-              autoComplete="username"
+              autoComplete="email"
             />
             <AuthInput
               label="Password"
@@ -76,9 +80,10 @@ export default function CoachLogin() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
+              placeholder="Create a password"
               required
-              autoComplete="current-password"
+              minLength={4}
+              autoComplete="new-password"
             />
             {error && <p className="text-sm text-red-400">{error}</p>}
             <button
@@ -86,15 +91,15 @@ export default function CoachLogin() {
               disabled={loading}
               className="mt-1 rounded-xl bg-[var(--color-primary)] py-3 text-sm font-bold text-[var(--color-background)] disabled:opacity-50"
             >
-              {loading ? "Signing in..." : "Sign in"}
+              {loading ? "Creating account..." : "Create account"}
             </button>
             <p className="text-center text-sm text-white/45">
-              New coach?{" "}
+              Already registered?{" "}
               <Link
-                to="/coach/register"
+                to="/coach/login"
                 className="font-semibold text-[var(--color-primary)]"
               >
-                Create an account
+                Sign in
               </Link>
             </p>
           </div>

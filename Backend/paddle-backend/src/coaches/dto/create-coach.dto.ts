@@ -59,17 +59,20 @@ function parseStringArray(value: unknown): string[] | undefined {
 }
 
 export class CreateCoachDto {
+  @IsOptional()
   @IsString()
-  firstName!: string;
+  firstName?: string;
 
+  @IsOptional()
   @IsString()
-  lastName!: string;
+  lastName?: string;
 
   @IsEmail()
   email!: string;
 
+  @IsOptional()
   @IsString()
-  phoneNumber!: string;
+  phoneNumber?: string;
 
   @IsString()
   @MinLength(4)

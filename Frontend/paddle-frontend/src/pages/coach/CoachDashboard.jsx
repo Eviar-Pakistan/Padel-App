@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaCalendarAlt,
   FaCheck,
@@ -22,6 +22,7 @@ import {
   sendCoachConversationMessage,
   updateCoachMe,
 } from "../../api/coach";
+import { sanitizeFullName, sanitizePhone } from "../../utils/authFields";
 
 const WEEK_DAYS = [
   { value: "MON", label: "Monday" },
@@ -38,6 +39,58 @@ const GENDER_OPTIONS = [
   { value: "FEMALE", label: "Female" },
   { value: "OTHER", label: "Other" },
 ];
+
+const LANGUAGE_OPTIONS = [
+  { value: "English", label: "English" },
+  { value: "Urdu", label: "Urdu" },
+  { value: "Punjabi", label: "Punjabi" },
+  { value: "Sindhi", label: "Sindhi" },
+  { value: "Pashto", label: "Pashto" },
+  { value: "Saraiki", label: "Saraiki" },
+  { value: "Balochi", label: "Balochi" },
+  { value: "Spanish", label: "Spanish" },
+  { value: "Arabic", label: "Arabic" },
+];
+
+const PADEL_SPECIALTIES = [
+  { value: "Beginners", label: "Beginners" },
+  { value: "Intermediate", label: "Intermediate" },
+  { value: "Advanced / Competition", label: "Advanced / Competition" },
+  { value: "Kids & Juniors", label: "Kids & Juniors" },
+  { value: "Women's Padel", label: "Women's Padel" },
+  { value: "Serve & Return", label: "Serve & Return" },
+  { value: "Volleys", label: "Net / Volleys" },
+  { value: "Bandeja & Víbora", label: "Bandeja & Víbora" },
+  { value: "Smash", label: "Smash" },
+  { value: "Footwork & Movement", label: "Footwork & Movement" },
+  { value: "Doubles Tactics", label: "Doubles Tactics" },
+  { value: "Match Play", label: "Match Play" },
+  { value: "Fitness & Conditioning", label: "Fitness & Conditioning" },
+  { value: "Mental Game", label: "Mental Game" },
+];
+
+function asStringList(value) {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === "string" && value.trim()) {
+    return value.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function mergeOptions(base, selected) {
+  const extra = (selected || [])
+    .filter((v) => !base.some((o) => o.value === v))
+    .map((v) => ({ value: v, label: v }));
+  return extra.length ? [...extra, ...base] : base;
+}
+
+function splitFullName(value) {
+  const parts = String(value).trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || "",
+    lastName: parts.slice(1).join(" "),
+  };
+}
 
 function mediaUrl(path) {
   if (!path) return null;
@@ -122,7 +175,8 @@ function CoachBottomNav({ active, onChange, chatUnread = 0 }) {
 
 export default function CoachDashboard() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState("bookings");
+  const location = useLocation();
+  const [tab, setTab] = useState(location.state?.tab || "bookings");
   const [coach, setCoach] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [conversations, setConversations] = useState([]);
@@ -152,15 +206,14 @@ export default function CoachDashboard() {
       setConversations(Array.isArray(chatsRes.data) ? chatsRes.data : []);
       const c = meRes.data;
       setProfileForm({
-        firstName: c.firstName || "",
-        lastName: c.lastName || "",
+        fullName: [c.firstName, c.lastName].filter(Boolean).join(" "),
         email: c.email || "",
         phoneNumber: c.phoneNumber || "",
         gender: c.gender || "",
         bio: c.bio || "",
         sessionRate: c.sessionRate != null ? String(c.sessionRate) : "",
-        languages: Array.isArray(c.languages) ? c.languages.join(", ") : "",
-        specialties: Array.isArray(c.specialties) ? c.specialties.join(", ") : "",
+        languages: asStringList(c.languages),
+        specialties: asStringList(c.specialties),
         availableFromDay: c.availableFromDay || "MON",
         availableToDay: c.availableToDay || "FRI",
         availableFromTime: c.availableFromTime || "",
@@ -296,8 +349,12 @@ export default function CoachDashboard() {
     setMessage("");
     try {
       const fd = new FormData();
-      fd.append("firstName", profileForm.firstName.trim());
-      fd.append("lastName", profileForm.lastName.trim());
+      const { firstName, lastName } = splitFullName(profileForm.fullName);
+      if (!firstName) {
+        throw new Error("Full name is required.");
+      }
+      fd.append("firstName", firstName);
+      fd.append("lastName", lastName);
       fd.append("email", profileForm.email.trim());
       fd.append("phoneNumber", profileForm.phoneNumber.trim());
       if (profileForm.gender) fd.append("gender", profileForm.gender);
@@ -317,24 +374,11 @@ export default function CoachDashboard() {
       if (profileForm.availableToTime) {
         fd.append("availableToTime", profileForm.availableToTime);
       }
-      if (profileForm.languages.trim()) {
-        fd.append(
-          "languages",
-          JSON.stringify(
-            profileForm.languages.split(",").map((s) => s.trim()).filter(Boolean)
-          )
-        );
+      if (profileForm.languages.length) {
+        fd.append("languages", JSON.stringify(profileForm.languages));
       }
-      if (profileForm.specialties.trim()) {
-        fd.append(
-          "specialties",
-          JSON.stringify(
-            profileForm.specialties
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
-          )
-        );
+      if (profileForm.specialties.length) {
+        fd.append("specialties", JSON.stringify(profileForm.specialties));
       }
       if (profileForm.password?.trim()) {
         fd.append("password", profileForm.password.trim());
@@ -347,7 +391,11 @@ export default function CoachDashboard() {
       setProfileForm((f) => ({ ...f, password: "" }));
     } catch (err) {
       const msg = err.response?.data?.message;
-      setError(Array.isArray(msg) ? msg.join(", ") : msg || "Update failed.");
+      setError(
+        Array.isArray(msg)
+          ? msg.join(", ")
+          : msg || err.message || "Update failed."
+      );
     } finally {
       setSaving(false);
     }
@@ -385,7 +433,9 @@ export default function CoachDashboard() {
             <FaUserTie className="h-4 w-4 text-[var(--color-primary)]" />
             <div>
               <p className="text-sm font-bold">
-                {coach ? `${coach.firstName} ${coach.lastName}` : "Coach"}
+                {coach?.firstName?.trim() || coach?.lastName?.trim()
+                  ? `${coach.firstName} ${coach.lastName}`.trim()
+                  : "Coach"}
               </p>
               <p className="text-[11px] text-white/45">Coach portal</p>
             </div>
@@ -415,6 +465,21 @@ export default function CoachDashboard() {
 
         {tab === "bookings" && (
           <div className="space-y-4">
+            {!coach?.firstName?.trim() && (
+              <button
+                type="button"
+                onClick={() => setTab("profile")}
+                className="w-full rounded-2xl border border-[var(--color-primary)]/35 bg-[var(--color-primary)]/10 px-4 py-3 text-left"
+              >
+                <p className="text-sm font-semibold text-white">
+                  Complete your profile
+                </p>
+                <p className="mt-1 text-xs text-white/50">
+                  Add your name, photo, and details so players can find and
+                  book you.
+                </p>
+              </button>
+            )}
             <h1 className="text-lg font-bold">Booking requests</h1>
             {pending.length === 0 ? (
               <p className="text-sm text-white/40">No pending requests.</p>
@@ -619,26 +684,76 @@ export default function CoachDashboard() {
                 />
               </label>
             </div>
-            {[
-              ["firstName", "First name"],
-              ["lastName", "Last name"],
-              ["email", "Email"],
-              ["phoneNumber", "Phone"],
-              ["sessionRate", "Session rate (PKR)"],
-              ["languages", "Languages (comma separated)"],
-              ["specialties", "Specialties (comma separated)"],
-            ].map(([key, label]) => (
-              <label key={key} className="block text-sm text-white/70">
-                {label}
-                <input
-                  value={profileForm[key] || ""}
-                  onChange={(e) =>
-                    setProfileForm((f) => ({ ...f, [key]: e.target.value }))
-                  }
-                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
-                />
-              </label>
-            ))}
+            <label className="block text-sm text-white/70">
+              Full name
+              <input
+                required
+                value={profileForm.fullName || ""}
+                onChange={(e) =>
+                  setProfileForm((f) => ({
+                    ...f,
+                    fullName: sanitizeFullName(e.target.value),
+                  }))
+                }
+                className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
+              />
+            </label>
+            <label className="block text-sm text-white/70">
+              Email
+              <input
+                type="email"
+                required
+                value={profileForm.email || ""}
+                onChange={(e) =>
+                  setProfileForm((f) => ({ ...f, email: e.target.value }))
+                }
+                className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
+              />
+            </label>
+            <label className="block text-sm text-white/70">
+              Phone
+              <input
+                inputMode="tel"
+                value={profileForm.phoneNumber || ""}
+                onChange={(e) =>
+                  setProfileForm((f) => ({
+                    ...f,
+                    phoneNumber: sanitizePhone(e.target.value),
+                  }))
+                }
+                className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
+              />
+            </label>
+            <label className="block text-sm text-white/70">
+              Session rate (PKR)
+              <input
+                type="number"
+                min="0"
+                value={profileForm.sessionRate || ""}
+                onChange={(e) =>
+                  setProfileForm((f) => ({ ...f, sessionRate: e.target.value }))
+                }
+                className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
+              />
+            </label>
+            <CustomSelect
+              label="Languages"
+              multiple
+              searchable
+              value={profileForm.languages || []}
+              onChange={(v) => setProfileForm((f) => ({ ...f, languages: v }))}
+              placeholder="Select languages"
+              options={mergeOptions(LANGUAGE_OPTIONS, profileForm.languages)}
+            />
+            <CustomSelect
+              label="Specialties"
+              multiple
+              searchable
+              value={profileForm.specialties || []}
+              onChange={(v) => setProfileForm((f) => ({ ...f, specialties: v }))}
+              placeholder="Select padel specialties"
+              options={mergeOptions(PADEL_SPECIALTIES, profileForm.specialties)}
+            />
             <CustomSelect
               label="Gender"
               value={profileForm.gender || ""}
