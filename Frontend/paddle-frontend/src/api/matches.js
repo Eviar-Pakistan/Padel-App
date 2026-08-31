@@ -5,6 +5,11 @@ export const getLiveMatches = () => api.get("matches/live");
 export const getMatchResults = () => api.get("matches/results");
 export const getMatchHistory = () => api.get("matches/history");
 export const getMatch = (id) => api.get(`matches/${id}`);
+export const getMatchRankings = (id) => api.get(`matches/${id}/rankings`);
+export const submitMatchPeerRankings = (id, rankings) =>
+  api.post(`matches/${id}/rankings`, { rankings });
+export const submitMatchRefereeReview = (id, data) =>
+  api.post(`matches/${id}/referee-review`, data);
 export const getMatchPlayers = () => api.get("matches/players");
 export const getMatchReferees = (params) =>
   api.get("matches/referees", { params });

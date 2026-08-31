@@ -39,6 +39,11 @@ export const updateCoachBookingStatus = (bookingId, data) =>
 export const deleteCoachBooking = (bookingId) =>
   ownerApi.delete(`coaches/bookings/${bookingId}`);
 
+// Matches (on owner courts)
+export const getOwnerMatches = () => ownerApi.get("matches/owner");
+export const allocateOwnerMatchReferee = (matchId, refereeId) =>
+  ownerApi.post(`matches/owner/${matchId}/referee`, { refereeId });
+
 // Referees
 export const getReferees = () => ownerApi.get("referees");
 export const createReferee = (formData) =>

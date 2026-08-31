@@ -25,6 +25,10 @@ export const getRefereeMatches = () => refereeApi.get("referee-matches");
 export const getRefereeMatch = (id) => refereeApi.get(`referee-matches/${id}`);
 export const scoreRefereeMatch = (id, data) =>
   refereeApi.post(`referee-matches/${id}/score`, data);
+export const getRefereeMatchRankings = (id) =>
+  refereeApi.get(`referee-matches/${id}/rankings`);
+export const submitRefereeMatchRankings = (id, rankings) =>
+  refereeApi.post(`referee-matches/${id}/rankings`, { rankings });
 export const getRefereeMatchConversations = () =>
   refereeApi.get("referee-matches/conversations");
 export const acceptRefereeMatch = (id) =>

@@ -40,6 +40,61 @@ function lastPreview(group) {
   return m.fileName || "File";
 }
 
+function UnreadBadge({ count }) {
+  const n = Number(count) || 0;
+  if (n <= 0) return null;
+  return (
+    <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)] px-1.5 text-[10px] font-bold text-[var(--color-background)]">
+      {n > 99 ? "99+" : n}
+    </span>
+  );
+}
+
+const TYPE_BADGE_STYLES = {
+  Match: "bg-[var(--color-primary)]/20 text-[var(--color-primary)]",
+  Booking: "bg-sky-500/20 text-sky-300",
+  Group: "bg-violet-500/20 text-violet-300",
+  Player: "bg-emerald-500/20 text-emerald-300",
+  Coach: "bg-amber-500/20 text-amber-300",
+};
+
+function TypeBadge({ type }) {
+  if (!type) return null;
+  return (
+    <span
+      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+        TYPE_BADGE_STYLES[type] || "bg-white/10 text-white/70"
+      }`}
+    >
+      {type}
+    </span>
+  );
+}
+
+function matchChatTitle(c) {
+  if (c?.displayTitle) return c.displayTitle;
+  const court = c?.court?.name || c?.title || "Match";
+  const players = (c?.participants || []).filter((p) => p.status === "ACCEPTED");
+  const names = (team) =>
+    players
+      .filter((p) => (team === 1 ? Number(p.team) === 1 : Number(p.team) !== 1))
+      .map((p) => p.user?.fullName)
+      .filter(Boolean)
+      .join(" / ");
+  const a = names(0);
+  const b = names(1);
+  if (!a && !b) return c?.title || court;
+  return `${court} · ${a || "Team A"} vs ${b || "Team B"}`;
+}
+
+function groupChatTitle(g) {
+  if (g?.displayTitle) return g.displayTitle;
+  if (g?.isCourtBookingGroup) {
+    return g.description || g.name || "Court Booking";
+  }
+  return g?.name || "Group";
+}
+
 function idFromJwt(key) {
   try {
     const token = localStorage.getItem(key);
@@ -138,6 +193,24 @@ export default function Chat() {
 
   useEffect(() => {
     if (!activeId) return undefined;
+    // Opening a thread marks it read on the server; clear the badge immediately.
+    if (activeKind === "group") {
+      setGroups((prev) =>
+        prev.map((g) => (g.id === activeId ? { ...g, unreadCount: 0 } : g))
+      );
+    } else if (activeKind === "coach") {
+      setCoachChats((prev) =>
+        prev.map((c) => (c.id === activeId ? { ...c, unreadCount: 0 } : c))
+      );
+    } else if (activeKind === "player") {
+      setPlayerChats((prev) =>
+        prev.map((c) => (c.id === activeId ? { ...c, unreadCount: 0 } : c))
+      );
+    } else if (activeKind === "match") {
+      setMatchChats((prev) =>
+        prev.map((c) => (c.id === activeId ? { ...c, unreadCount: 0 } : c))
+      );
+    }
     loadMessages(activeId, undefined, activeKind);
     const t = setInterval(() => {
       setMessages((prev) => {
@@ -210,9 +283,9 @@ export default function Chat() {
       (activeKind === "group" && active.isMember));
 
   return (
-    <div className="h-dvh overflow-hidden bg-[var(--color-background)]">
+    <div className="flex h-dvh flex-col overflow-hidden bg-[var(--color-background)]">
       <TopNav />
-      <main className="mx-auto flex h-dvh w-full max-w-md flex-col pt-16">
+      <main className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col pt-16">
         {showThread ? (
           <div className="flex min-h-0 flex-1 flex-col">
             <ChatThread
@@ -233,10 +306,18 @@ export default function Chat() {
                       }
                     : activeKind === "match"
                       ? {
-                          name: active.title || active.court?.name || "Match",
-                          _count: { members: 4 },
+                          name: matchChatTitle(active),
+                          _count: {
+                            members:
+                              active.participants?.filter(
+                                (p) => p.status === "ACCEPTED"
+                              ).length || 4,
+                          },
                         }
-                    : active
+                      : {
+                          ...active,
+                          name: groupChatTitle(active),
+                        }
               }
               messages={threadMessages}
               me={{ kind: "user", id: meId }}
@@ -246,12 +327,27 @@ export default function Chat() {
               }}
               onSend={onSend}
               sending={sending}
+              headerRight={
+                <TypeBadge
+                  type={
+                    activeKind === "match"
+                      ? "Match"
+                      : activeKind === "player"
+                        ? "Player"
+                        : activeKind === "coach"
+                          ? "Coach"
+                          : active.isCourtBookingGroup
+                            ? "Booking"
+                            : "Group"
+                  }
+                />
+              }
             />
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col px-4 pb-24 pt-3">
-            <h1 className="text-lg font-bold text-white">Chats</h1>
-            <div className="mt-3 flex gap-2">
+            <h1 className="shrink-0 text-lg font-bold text-white">Chats</h1>
+            <div className="mt-3 flex shrink-0 gap-2">
               {[
                 { id: "chats", label: "My chats" },
                 { id: "discover", label: "Discover" },
@@ -271,10 +367,11 @@ export default function Chat() {
               ))}
             </div>
 
-            {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+            {error && <p className="mt-3 shrink-0 text-sm text-red-400">{error}</p>}
 
+            <div className="mt-4 h-0 min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y">
             {loading ? (
-              <p className="mt-6 text-sm text-white/40">Loading chats...</p>
+              <p className="mt-2 text-sm text-white/40">Loading chats...</p>
             ) : tab === "chats" ? (
               myGroups.length === 0 &&
               coachChats.length === 0 &&
@@ -285,8 +382,10 @@ export default function Chat() {
                   challenge.
                 </p>
               ) : (
-                <ul className="mt-4 divide-y divide-white/5">
-                  {matchChats.map((c) => (
+                <ul className="divide-y divide-white/1">
+                  {matchChats.map((c) => {
+                    const unread = Number(c.unreadCount) || 0;
+                    return (
                     <li key={`match-${c.id}`}>
                       <button
                         type="button"
@@ -300,17 +399,34 @@ export default function Chat() {
                           <FaTrophy className="h-5 w-5" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-white">
-                            {c.title || c.court?.name || "Match"}
+                          <p
+                            className={`truncate text-sm ${
+                              unread > 0 ? "font-bold text-white" : "font-semibold text-white"
+                            }`}
+                          >
+                            {matchChatTitle(c)}
                           </p>
-                          <p className="truncate text-xs text-white/45">
+                          <p
+                            className={`truncate text-xs ${
+                              unread > 0
+                                ? "font-medium text-white/80"
+                                : "text-white/45"
+                            }`}
+                          >
                             {lastPreview(c)}
                           </p>
                         </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <TypeBadge type="Match" />
+                          <UnreadBadge count={unread} />
+                        </div>
                       </button>
                     </li>
-                  ))}
-                  {playerChats.map((c) => (
+                    );
+                  })}
+                  {playerChats.map((c) => {
+                    const unread = Number(c.unreadCount) || 0;
+                    return (
                     <li key={`player-${c.id}`}>
                       <button
                         type="button"
@@ -334,17 +450,34 @@ export default function Chat() {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-white">
+                          <p
+                            className={`truncate text-sm ${
+                              unread > 0 ? "font-bold text-white" : "font-semibold text-white"
+                            }`}
+                          >
                             {c.otherUser?.fullName || "Player"}
                           </p>
-                          <p className="truncate text-xs text-white/45">
+                          <p
+                            className={`truncate text-xs ${
+                              unread > 0
+                                ? "font-medium text-white/80"
+                                : "text-white/45"
+                            }`}
+                          >
                             {lastPreview(c)}
                           </p>
                         </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <TypeBadge type="Player" />
+                          <UnreadBadge count={unread} />
+                        </div>
                       </button>
                     </li>
-                  ))}
-                  {coachChats.map((c) => (
+                    );
+                  })}
+                  {coachChats.map((c) => {
+                    const unread = Number(c.unreadCount) || 0;
+                    return (
                     <li key={`coach-${c.id}`}>
                       <button
                         type="button"
@@ -368,19 +501,37 @@ export default function Chat() {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-white">
+                          <p
+                            className={`truncate text-sm ${
+                              unread > 0 ? "font-bold text-white" : "font-semibold text-white"
+                            }`}
+                          >
                             {c.coach
                               ? `Coach ${c.coach.firstName} ${c.coach.lastName}`.trim()
                               : "Coach"}
                           </p>
-                          <p className="truncate text-xs text-white/45">
+                          <p
+                            className={`truncate text-xs ${
+                              unread > 0
+                                ? "font-medium text-white/80"
+                                : "text-white/45"
+                            }`}
+                          >
                             {lastPreview(c)}
                           </p>
                         </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <TypeBadge type="Coach" />
+                          <UnreadBadge count={unread} />
+                        </div>
                       </button>
                     </li>
-                  ))}
-                  {myGroups.map((g) => (
+                    );
+                  })}
+                  {myGroups.map((g) => {
+                    const unread = Number(g.unreadCount) || 0;
+                    const type = g.isCourtBookingGroup ? "Booking" : "Group";
+                    return (
                     <li key={g.id}>
                       <button
                         type="button"
@@ -404,22 +555,37 @@ export default function Chat() {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-white">
-                            {g.name}
+                          <p
+                            className={`truncate text-sm ${
+                              unread > 0 ? "font-bold text-white" : "font-semibold text-white"
+                            }`}
+                          >
+                            {groupChatTitle(g)}
                           </p>
-                          <p className="truncate text-xs text-white/45">
+                          <p
+                            className={`truncate text-xs ${
+                              unread > 0
+                                ? "font-medium text-white/80"
+                                : "text-white/45"
+                            }`}
+                          >
                             {lastPreview(g)}
                           </p>
                         </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <TypeBadge type={type} />
+                          <UnreadBadge count={unread} />
+                        </div>
                       </button>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )
             ) : discover.length === 0 ? (
-              <p className="mt-6 text-sm text-white/40">No groups yet.</p>
+              <p className="mt-2 text-sm text-white/40">No groups yet.</p>
             ) : (
-              <ul className="mt-4 space-y-2">
+              <ul className="space-y-2 pb-2">
                 {discover.map((g) => (
                   <li
                     key={g.id}
@@ -474,6 +640,7 @@ export default function Chat() {
                 ))}
               </ul>
             )}
+            </div>
           </div>
         )}
       </main>

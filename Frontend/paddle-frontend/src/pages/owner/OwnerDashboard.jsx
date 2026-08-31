@@ -13,6 +13,7 @@ import {
   FaSignOutAlt,
   FaNewspaper,
   FaComments,
+  FaTrophy,
 } from "react-icons/fa";
 import OwnerOverviewPanel from "./OwnerOverviewPanel";
 import OwnerCourtsPanel from "./OwnerCourtsPanel";
@@ -23,11 +24,13 @@ import OwnerProductsPanel from "./OwnerProductsPanel";
 import OwnerOrdersPanel from "./OwnerOrdersPanel";
 import OwnerNewsPanel from "./OwnerNewsPanel";
 import OwnerChatPanel from "./OwnerChatPanel";
+import OwnerMatchesPanel from "./OwnerMatchesPanel";
 
 const navItems = [
   { id: "overview", label: "Overview", icon: FaChartPie },
   { id: "courts", label: "Courts", icon: FaBuilding },
   { id: "bookings", label: "Bookings", icon: FaCalendarAlt },
+  { id: "matches", label: "Matches", icon: FaTrophy },
   { id: "news", label: "News", icon: FaNewspaper },
   { id: "chat", label: "Chat", icon: FaComments },
   { id: "coaches", label: "Coaches", icon: FaUserTie },
@@ -164,6 +167,7 @@ export default function OwnerDashboard() {
           {activeTab === "overview" && <OwnerOverviewPanel />}
           {activeTab === "courts" && <OwnerCourtsPanel />}
           {activeTab === "bookings" && <OwnerBookingsPanel />}
+          {activeTab === "matches" && <OwnerMatchesPanel />}
           {activeTab === "news" && <OwnerNewsPanel />}
           {activeTab === "chat" && <OwnerChatPanel />}
           {activeTab === "coaches" && <OwnerCoachesPanel />}

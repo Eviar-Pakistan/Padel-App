@@ -61,7 +61,7 @@ export default function LiveMatches() {
           <div>
             <h1 className="text-2xl font-bold text-white">Live Matches</h1>
             <p className="text-xs text-white/40">
-              Tap Watch Live Score to open scoring
+              Tap Watch Live Score for the full referee-style board
             </p>
           </div>
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-primary)]">

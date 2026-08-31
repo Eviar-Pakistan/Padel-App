@@ -73,9 +73,9 @@ function ScoreBoxes({ score, className = "" }) {
   return (
     <div className={className}>
       {[
-        ["SETS", score.setA ?? 0, score.setB ?? 0],
-        ["GAMES", score.gameA ?? 0, score.gameB ?? 0],
         ["POINTS", score.pointsLabelA ?? "0", score.pointsLabelB ?? "0"],
+        ["GAMES", score.gameA ?? 0, score.gameB ?? 0],
+        ["SETS", score.setA ?? 0, score.setB ?? 0],
       ].map(([label, a, b]) => (
         <div
           key={label}
@@ -84,8 +84,10 @@ function ScoreBoxes({ score, className = "" }) {
           <p className="text-[8px] font-bold uppercase tracking-wide text-white/40">
             {label}
           </p>
-          <p className="text-sm font-black text-[var(--color-primary)]">{a}</p>
-          <p className="text-sm font-black text-white">{b}</p>
+          <div className="flex items-center justify-center gap-2">
+            <p className="text-sm font-black text-[var(--color-primary)]">{a}</p>
+            <p className="text-sm font-black text-white">{b}</p>
+          </div>
         </div>
       ))}
     </div>
@@ -151,14 +153,15 @@ export default function LiveScoreBoard({
         </span>
       </div>
 
+      {/* Same layout as referee score page: players | POINTS/GAMES/SETS | players */}
       <div className="flex items-center gap-2">
         <TeamCol players={left} />
-        {expandable ? (
+        {expandable && !expanded ? (
           <p className="shrink-0 px-1 text-xs font-black text-white/70">VS</p>
         ) : (
           <ScoreBoxes
             score={score}
-            className="grid w-[9.5rem] shrink-0 grid-cols-3 gap-1"
+            className="grid w-[7.5rem] shrink-0 grid-cols-1 gap-1"
           />
         )}
         <TeamCol players={right} align="right" />
@@ -170,12 +173,6 @@ export default function LiveScoreBoard({
         }`}
       >
         <div className="overflow-hidden">
-          {expandable && (
-            <ScoreBoxes
-              score={score}
-              className="mt-3 grid grid-cols-3 gap-1.5"
-            />
-          )}
           {score.event && (
             <p className="mt-3 text-center text-[11px] font-bold text-[var(--color-primary)]">
               {score.event}
@@ -216,7 +213,7 @@ export default function LiveScoreBoard({
           {expandable && expanded ? (
             <>
               <FaChevronUp className="h-3.5 w-3.5" />
-              Hide live score
+              Hide scoreboard
             </>
           ) : (
             <>

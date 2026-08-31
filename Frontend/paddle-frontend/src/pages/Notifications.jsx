@@ -64,6 +64,8 @@ function SwipeNotificationRow({ item, onMarkedRead, onAccepted }) {
     meta?.action === "OPEN_CHALLENGE_CHAT" && meta?.conversationId;
   const canViewChallenges = canAcceptChallenge;
   const canOpenMatch = meta?.action === "OPEN_MATCH" && meta?.matchId;
+  const canOpenNewsPost =
+    meta?.action === "OPEN_NEWS_POST" && meta?.postId;
   const canAccept =
     canAcceptJoin || canAcceptChallenge || canAcceptMatch || canAcceptMatchJoin;
 
@@ -139,6 +141,10 @@ function SwipeNotificationRow({ item, onMarkedRead, onAccepted }) {
     }
     if (canOpenMatch || canAcceptMatch) {
       navigate(`/matches/${meta.matchId}`);
+      return;
+    }
+    if (canOpenNewsPost) {
+      navigate(`/news?post=${meta.postId}`);
       return;
     }
     if (canViewChallenges) {
@@ -218,9 +224,13 @@ function SwipeNotificationRow({ item, onMarkedRead, onAccepted }) {
           )}
         </div>
         <p className="mt-1 text-sm text-white/90">{item.message}</p>
-        {canAccept || canOpenChallengeChat || canOpenMatch ? (
+        {canAccept || canOpenChallengeChat || canOpenMatch || canOpenNewsPost ? (
           <div data-no-swipe className="mt-3 flex flex-wrap gap-2">
-            {(canViewChallenges || canOpenChallengeChat || canOpenMatch || canAcceptMatch) && (
+            {(canViewChallenges ||
+              canOpenChallengeChat ||
+              canOpenMatch ||
+              canAcceptMatch ||
+              canOpenNewsPost) && (
               <button
                 type="button"
                 onClick={onView}

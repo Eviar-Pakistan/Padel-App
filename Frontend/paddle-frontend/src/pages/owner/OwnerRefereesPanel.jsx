@@ -214,8 +214,13 @@ export default function OwnerRefereesPanel() {
     try {
       const fd = new FormData();
       fd.append("fullName", form.fullName.trim());
-      fd.append("email", form.email.trim());
+      if (!form.phoneNumber.trim()) {
+        throw new Error("Phone number is required for referee login.");
+      }
       fd.append("phoneNumber", form.phoneNumber.trim());
+      if (form.email.trim()) {
+        fd.append("email", form.email.trim());
+      }
       if (form.password.trim()) {
         fd.append("password", form.password.trim());
       } else if (!editingId) {
@@ -303,23 +308,23 @@ export default function OwnerRefereesPanel() {
               }
             />
             <Field
-              label="Email"
-              type="email"
-              required
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            />
-            <Field
-              label="Phone number"
+              label="Phone number (login)"
               required
               value={form.phoneNumber}
               inputMode="tel"
+              placeholder="03XXXXXXXXX"
               onChange={(e) =>
                 setForm((f) => ({
                   ...f,
                   phoneNumber: sanitizePhone(e.target.value),
                 }))
               }
+            />
+            <Field
+              label="Email (optional)"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             />
             <Field
               label={editingId ? "New password (optional)" : "Password"}
@@ -536,7 +541,8 @@ export default function OwnerRefereesPanel() {
                         </span>
                       </p>
                       <p className="mt-1 text-sm text-[var(--color-muted)]">
-                        {ref.email} · {ref.phoneNumber}
+                        {ref.phoneNumber}
+                        {ref.email ? ` · ${ref.email}` : ""}
                       </p>
                       {availability && (
                         <p className="mt-1 text-xs text-white/60">{availability}</p>

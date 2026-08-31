@@ -331,8 +331,13 @@ export default function OwnerCoachesPanel() {
       }
       formData.append("firstName", firstName);
       formData.append("lastName", lastName);
-      formData.append("email", form.email.trim());
+      if (!form.phoneNumber.trim()) {
+        throw new Error("Phone number is required for coach login.");
+      }
       formData.append("phoneNumber", form.phoneNumber.trim());
+      if (form.email.trim()) {
+        formData.append("email", form.email.trim());
+      }
       if (form.password.trim()) {
         formData.append("password", form.password.trim());
       } else if (!editingId) {
@@ -435,19 +440,11 @@ export default function OwnerCoachesPanel() {
                 }
               />
               <Field
-                label="Email address"
-                type="email"
-                required
-                placeholder="Enter email address"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              />
-              <Field
-                label="Phone number"
+                label="Phone number (login)"
                 required
                 prefix="+92"
                 inputMode="tel"
-                placeholder="Enter phone number"
+                placeholder="03XXXXXXXXX"
                 value={form.phoneNumber}
                 onChange={(e) =>
                   setForm((f) => ({
@@ -455,6 +452,13 @@ export default function OwnerCoachesPanel() {
                     phoneNumber: sanitizePhone(e.target.value),
                   }))
                 }
+              />
+              <Field
+                label="Email address (optional)"
+                type="email"
+                placeholder="Enter email address"
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
               />
               <Field
                 label={editingId ? "Login password (optional)" : "Login password"}
@@ -768,7 +772,8 @@ export default function OwnerCoachesPanel() {
                         </span>
                       </p>
                       <p className="mt-1 text-sm text-[var(--color-muted)]">
-                        {coach.email} · {coach.phoneNumber}
+                        {coach.phoneNumber}
+                        {coach.email ? ` · ${coach.email}` : ""}
                       </p>
                       {availability && (
                         <p className="mt-1 text-xs text-white/60">{availability}</p>

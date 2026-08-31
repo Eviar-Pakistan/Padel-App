@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  FaCalendarCheck,
   FaChevronDown,
   FaClock,
   FaMapMarkerAlt,
@@ -13,7 +14,7 @@ import {
 } from "react-icons/fa";
 import TopNav from "../components/TopNav";
 import BottomNav from "../components/BottomNav";
-import { getCoaches } from "../api/coaches";
+import { addCoachReview, getCoaches, getMyCoachBookings } from "../api/coaches";
 import { getMyProfile } from "../api/auth";
 import coachBanner from "../assets/images/padel_banner_coach.png";
 
@@ -150,11 +151,16 @@ function coachLocation(coach) {
 
 export default function Coaches() {
   const navigate = useNavigate();
+  const [pageTab, setPageTab] = useState("coaches"); // coaches | bookings
   const [coaches, setCoaches] = useState([]);
+  const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [bookingsError, setBookingsError] = useState("");
   const [sortId, setSortId] = useState("rating");
   const [sortOpen, setSortOpen] = useState(false);
+  const [reviewBooking, setReviewBooking] = useState(null);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTab, setSearchTab] = useState("location");
@@ -166,6 +172,22 @@ export default function Coaches() {
   const [filterRatingId, setFilterRatingId] = useState("");
   const searchInputRef = useRef(null);
   const sortRef = useRef(null);
+
+  const loadBookings = async () => {
+    setBookingsLoading(true);
+    setBookingsError("");
+    try {
+      const { data } = await getMyCoachBookings();
+      setBookings(Array.isArray(data) ? data : []);
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setBookingsError(
+        Array.isArray(msg) ? msg.join(", ") : msg || "Failed to load bookings."
+      );
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -199,6 +221,10 @@ export default function Coaches() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (pageTab === "bookings") loadBookings();
+  }, [pageTab]);
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -315,12 +341,49 @@ export default function Coaches() {
   const selectedPrice = PRICE_OPTIONS.find((p) => p.id === filterPriceId);
   const selectedRating = RATING_OPTIONS.find((r) => r.id === filterRatingId);
 
+  const previousBookings = useMemo(
+    () => bookings.filter((b) => b.isPrevious || b.sessionDone || b.status === "COMPLETED" || b.status === "CANCELLED"),
+    [bookings]
+  );
+  const upcomingBookings = useMemo(
+    () =>
+      bookings.filter(
+        (b) =>
+          !b.isPrevious &&
+          !b.sessionDone &&
+          b.status !== "COMPLETED" &&
+          b.status !== "CANCELLED"
+      ),
+    [bookings]
+  );
+
   return (
     <div className="min-h-dvh bg-[var(--color-background)]">
       <TopNav />
 
       <main className="mx-auto w-full max-w-md px-0 pb-28 pt-16">
         <div className="sticky top-16 z-40 border-b border-white/10 bg-[var(--color-background)] px-4 py-3">
+          <div className="mb-3 flex gap-2">
+            {[
+              { id: "coaches", label: "Find coaches" },
+              { id: "bookings", label: "My bookings" },
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setPageTab(t.id)}
+                className={`rounded-full px-3.5 py-1.5 text-sm font-medium ${
+                  pageTab === t.id
+                    ? "bg-[var(--color-primary)] text-[var(--color-background)]"
+                    : "bg-white/10 text-white/80"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {pageTab === "coaches" && (
           <button
             type="button"
             onClick={() => openSearch("location")}
@@ -331,8 +394,9 @@ export default function Coaches() {
               Search by location, day, time, price, or rating...
             </span>
           </button>
+          )}
 
-          {hasFilters && (
+          {pageTab === "coaches" && hasFilters && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {filterLocation && (
                 <Chip
@@ -385,6 +449,75 @@ export default function Coaches() {
           )}
         </div>
 
+        {pageTab === "bookings" ? (
+          <div className="px-4 pt-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-base font-bold text-white">Coach bookings</h2>
+              <button
+                type="button"
+                onClick={loadBookings}
+                className="text-xs font-medium text-[var(--color-primary)]"
+              >
+                Refresh
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-white/40">
+              Review past sessions with a star rating and message.
+            </p>
+            {bookingsLoading ? (
+              <p className="mt-6 text-sm text-white/40">Loading bookings...</p>
+            ) : bookingsError ? (
+              <p className="mt-6 text-sm text-red-400">{bookingsError}</p>
+            ) : bookings.length === 0 ? (
+              <p className="mt-6 text-sm text-white/40">
+                No coach bookings yet. Find a coach and book a session.
+              </p>
+            ) : (
+              <div className="mt-4 space-y-6">
+                {upcomingBookings.length > 0 && (
+                  <section>
+                    <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-white/45">
+                      Upcoming
+                    </h3>
+                    <ul className="space-y-3">
+                      {upcomingBookings.map((b) => (
+                        <BookingCard
+                          key={b.id}
+                          booking={b}
+                          onReview={null}
+                        />
+                      ))}
+                    </ul>
+                  </section>
+                )}
+                <section>
+                  <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-white/45">
+                    Previous
+                  </h3>
+                  {previousBookings.length === 0 ? (
+                    <p className="text-sm text-white/40">
+                      No previous sessions yet.
+                    </p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {previousBookings.map((b) => (
+                        <BookingCard
+                          key={b.id}
+                          booking={b}
+                          onReview={
+                            b.canReview
+                              ? () => setReviewBooking(b)
+                              : null
+                          }
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              </div>
+            )}
+          </div>
+        ) : (
         <div className="px-4 pt-4">
           <section className="overflow-hidden rounded-2xl">
             <img
@@ -454,7 +587,22 @@ export default function Coaches() {
             </ul>
           )}
         </div>
+        )}
       </main>
+
+      {reviewBooking && (
+        <ReviewModal
+          booking={reviewBooking}
+          onClose={() => setReviewBooking(null)}
+          onSaved={() => {
+            setReviewBooking(null);
+            loadBookings();
+            getCoaches()
+              .then(({ data }) => setCoaches(Array.isArray(data) ? data : []))
+              .catch(() => {});
+          }}
+        />
+      )}
 
       {searchOpen && (
         <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-[2px]">
@@ -661,6 +809,195 @@ export default function Coaches() {
           else navigate(`/${id}`);
         }}
       />
+    </div>
+  );
+}
+
+function statusStyle(status) {
+  if (status === "COMPLETED") {
+    return "bg-[var(--color-primary)]/15 text-[var(--color-primary)]";
+  }
+  if (status === "CONFIRMED") {
+    return "bg-sky-500/15 text-sky-300";
+  }
+  if (status === "CANCELLED") {
+    return "bg-red-500/15 text-red-300";
+  }
+  return "bg-white/10 text-white/70";
+}
+
+function BookingCard({ booking, onReview }) {
+  const coach = booking.coach;
+  const name = coach
+    ? `Coach ${coach.firstName} ${coach.lastName}`.trim()
+    : "Coach";
+  const image = mediaUrl(coach?.profileImage);
+  const dateStr = String(booking.bookingDate || "").slice(0, 10);
+  const timeLabel = `${formatTime12(booking.startTime)}${
+    booking.endTime ? ` – ${formatTime12(booking.endTime)}` : ""
+  }`;
+
+  return (
+    <li className="rounded-2xl border border-white/10 bg-[var(--color-surface)] p-3.5">
+      <div className="flex items-start gap-3">
+        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full bg-[#1f2c34]">
+          {image ? (
+            <img src={image} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full items-center justify-center text-[var(--color-primary)]">
+              <FaUserTie className="h-5 w-5" />
+            </div>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-sm font-semibold text-white">{name}</p>
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${statusStyle(
+                booking.status
+              )}`}
+            >
+              {booking.status}
+            </span>
+          </div>
+          <p className="mt-1 flex items-center gap-1.5 text-xs text-white/55">
+            <FaCalendarCheck className="h-3 w-3 shrink-0 text-[var(--color-primary)]" />
+            {dateStr} · {timeLabel}
+          </p>
+          {coach?.paddleOwner?.organizationName && (
+            <p className="mt-0.5 truncate text-[11px] text-white/40">
+              {coach.paddleOwner.organizationName}
+            </p>
+          )}
+          {booking.hasReviewed && booking.myReview && (
+            <p className="mt-2 flex items-center gap-1 text-xs text-[var(--color-primary)]">
+              <FaStar className="h-3 w-3" />
+              You rated {booking.myReview.rating}/5
+              {booking.myReview.comment
+                ? ` · “${booking.myReview.comment}”`
+                : ""}
+            </p>
+          )}
+        </div>
+      </div>
+      {onReview && (
+        <button
+          type="button"
+          onClick={onReview}
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-primary)] py-2.5 text-xs font-bold text-[var(--color-background)]"
+        >
+          <FaStar className="h-3.5 w-3.5" />
+          Leave review
+        </button>
+      )}
+    </li>
+  );
+}
+
+function ReviewModal({ booking, onClose, onSaved }) {
+  const coach = booking?.coach;
+  const name = coach
+    ? `Coach ${coach.firstName} ${coach.lastName}`.trim()
+    : "Coach";
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!coach?.id) return;
+    setSaving(true);
+    setError("");
+    try {
+      await addCoachReview(coach.id, {
+        rating: Number(rating),
+        comment: comment.trim() || undefined,
+      });
+      onSaved?.();
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(
+        Array.isArray(msg) ? msg.join(", ") : msg || "Could not save review."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 sm:items-center">
+      <form
+        onSubmit={submit}
+        className="w-full max-w-md rounded-t-2xl border border-white/10 bg-[var(--color-surface)] p-4 sm:rounded-2xl"
+      >
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-base font-bold text-white">Leave a review</h3>
+            <p className="text-xs text-white/45">{name}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-white/50 hover:bg-white/10"
+            aria-label="Close"
+          >
+            <FaTimes className="h-4 w-4" />
+          </button>
+        </div>
+
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/40">
+          Rating
+        </p>
+        <div className="mb-4 flex gap-2">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setRating(n)}
+              className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
+                n <= rating
+                  ? "border-[var(--color-primary)] bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+                  : "border-white/15 text-white/35"
+              }`}
+              aria-label={`${n} stars`}
+            >
+              <FaStar className="h-4 w-4" />
+            </button>
+          ))}
+        </div>
+
+        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-white/40">
+          Message
+        </label>
+        <textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          rows={4}
+          maxLength={500}
+          placeholder="How was your session?"
+          className="w-full resize-none rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none placeholder:text-white/35 focus:border-[var(--color-primary)]/50"
+        />
+
+        {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-white/15 py-2.5 text-sm font-semibold text-white"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-xl bg-[var(--color-primary)] py-2.5 text-sm font-bold text-[var(--color-background)] disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Submit review"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

@@ -37,8 +37,15 @@ function monthCells(year, month) {
   return cells;
 }
 
-function eventTitle(match) {
-  return match.title || `Padel · ${match.court?.name || "Court"}`;
+function eventTitle(event) {
+  if (event.kind === "booking") {
+    return event.title || `Court booking · ${event.court?.name || "Court"}`;
+  }
+  return event.title || `Padel · ${event.court?.name || "Court"}`;
+}
+
+function eventKey(event) {
+  return `${event.kind || "match"}-${event.id}`;
 }
 
 export default function Calendar() {
@@ -107,7 +114,8 @@ export default function Calendar() {
         <div>
           <h1 className="text-lg font-bold text-white">Calendar</h1>
           <p className="text-xs text-white/40">
-            Dates you added from Matches are highlighted. Tap a date to see the event.
+            Your court bookings and matches you added are highlighted. Tap a date
+            to see the events.
           </p>
         </div>
 
@@ -180,34 +188,64 @@ export default function Calendar() {
             <p className="text-sm text-white/40">Loading events...</p>
           ) : selectedEvents.length === 0 ? (
             <p className="text-sm text-white/40">
-              No events on this date. Add a match from the Matches page.
+              No events on this date. Book a court or add a match from Matches.
             </p>
           ) : (
             <ul className="space-y-2">
-              {selectedEvents.map((match) => (
-                <li key={match.id}>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/matches/${match.id}`)}
-                    className="w-full rounded-2xl border border-white/10 bg-[#16301f] px-4 py-3 text-left"
-                  >
-                    <p className="text-sm font-bold text-white">
-                      {eventTitle(match)}
-                    </p>
+              {selectedEvents.map((event) => {
+                const isBooking = event.kind === "booking";
+                const cardClass =
+                  "w-full rounded-2xl border border-white/10 px-4 py-3 text-left " +
+                  (isBooking ? "bg-[#1a2834]" : "bg-[#16301f]");
+                const body = (
+                  <>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-bold text-white">
+                        {eventTitle(event)}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          isBooking
+                            ? "bg-sky-400/15 text-sky-300"
+                            : "bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+                        }`}
+                      >
+                        {isBooking
+                          ? event.role === "owner"
+                            ? "Booking"
+                            : "Joined"
+                          : "Match"}
+                      </span>
+                    </div>
                     <p className="mt-1 text-xs text-[var(--color-primary)]">
-                      {formatWeekday(match.bookingDate)} ·{" "}
-                      {formatTime12(match.startTime)}
-                      {match.endTime ? ` – ${formatTime12(match.endTime)}` : ""}
+                      {formatWeekday(event.bookingDate)} ·{" "}
+                      {formatTime12(event.startTime)}
+                      {event.endTime ? ` – ${formatTime12(event.endTime)}` : ""}
                     </p>
                     <p className="mt-1 text-xs text-white/50">
-                      {match.court?.name || "Court"}
-                      {match.court?.paddleOwner?.organizationName
-                        ? ` · ${match.court.paddleOwner.organizationName}`
+                      {event.court?.name || "Court"}
+                      {event.court?.paddleOwner?.organizationName
+                        ? ` · ${event.court.paddleOwner.organizationName}`
                         : ""}
                     </p>
-                  </button>
-                </li>
-              ))}
+                  </>
+                );
+                return (
+                  <li key={eventKey(event)}>
+                    {isBooking ? (
+                      <div className={cardClass}>{body}</div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/matches/${event.id}`)}
+                        className={cardClass}
+                      >
+                        {body}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>

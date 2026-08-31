@@ -363,7 +363,7 @@ export default function ChatThread({
         {headerRight}
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      <div className="h-0 min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y px-3 py-3">
         {messages.length === 0 ? (
           <p className="py-10 text-center text-sm text-white/35">
             No messages yet. Say hello.

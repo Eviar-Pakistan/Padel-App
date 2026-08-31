@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   FaArrowLeft,
   FaBookmark,
@@ -13,6 +13,7 @@ import {
   FaTimes,
   FaMapMarkerAlt,
   FaTag,
+  FaUser,
 } from "react-icons/fa";
 import { FiMessageCircle, FiShare2 } from "react-icons/fi";
 import TopNav from "../components/TopNav";
@@ -23,9 +24,11 @@ import {
   createNewsPost,
   deleteNewsComment,
   deleteNewsPost,
+  getMyNews,
   getNewsComments,
   getNewsFeed,
   getNewsFilters,
+  getNewsPost,
   likeNewsComment,
   likeNewsPost,
   saveNewsPost,
@@ -83,6 +86,8 @@ const emptyForm = {
 
 export default function NewsFeed() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusPostId = searchParams.get("post");
   const [posts, setPosts] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [filters, setFilters] = useState({ categories: CATEGORIES, locations: [] });
@@ -95,10 +100,12 @@ export default function NewsFeed() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [feedMode, setFeedMode] = useState("all"); // all | mine
   const [showComposer, setShowComposer] = useState(false);
   const [editingPost, setEditingPost] = useState(null);
   const [commentsPostId, setCommentsPostId] = useState(null);
   const searchInputRef = useRef(null);
+  const focusHandledRef = useRef("");
 
   const loadFilters = async () => {
     try {
@@ -141,13 +148,65 @@ export default function NewsFeed() {
     [category, location, q]
   );
 
+  const loadMyPosts = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    setNextCursor(null);
+    try {
+      const { data } = await getMyNews();
+      setPosts(Array.isArray(data) ? data : []);
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(
+        Array.isArray(msg) ? msg.join(", ") : msg || "Failed to load your posts."
+      );
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadFilters();
   }, []);
 
   useEffect(() => {
+    if (feedMode === "mine") return;
     loadFeed();
-  }, [loadFeed]);
+  }, [feedMode, loadFeed]);
+
+  useEffect(() => {
+    if (feedMode !== "mine") return;
+    loadMyPosts();
+  }, [feedMode, loadMyPosts]);
+
+  // Deep-link from notifications / shares: /news?post=<id>
+  useEffect(() => {
+    if (!focusPostId || loading) return;
+    if (focusHandledRef.current === focusPostId) return;
+    focusHandledRef.current = focusPostId;
+
+    const openFocused = async () => {
+      const inList = posts.some((p) => p.id === focusPostId);
+      if (!inList) {
+        try {
+          const { data } = await getNewsPost(focusPostId);
+          if (data?.id) {
+            setPosts((prev) =>
+              prev.some((p) => p.id === data.id) ? prev : [data, ...prev]
+            );
+          }
+        } catch {
+          /* post may be deleted */
+        }
+      }
+      setCommentsPostId(focusPostId);
+      const next = new URLSearchParams(searchParams);
+      next.delete("post");
+      setSearchParams(next, { replace: true });
+    };
+    openFocused();
+  }, [focusPostId, loading, posts, searchParams, setSearchParams]);
 
   const patchPost = (updated) => {
     setPosts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
@@ -283,7 +342,23 @@ export default function NewsFeed() {
             >
               <FaArrowLeft className="h-4 w-4" />
             </button> */}
-            <h1 className="flex-1 text-lg font-bold text-white">News Feed</h1>
+            <h1 className="flex-1 text-lg font-bold text-white">
+              {feedMode === "mine" ? "My Posts" : "News Feed"}
+            </h1>
+            <button
+              type="button"
+              onClick={() =>
+                setFeedMode((mode) => (mode === "mine" ? "all" : "mine"))
+              }
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${
+                feedMode === "mine"
+                  ? "bg-[var(--color-primary)] text-[var(--color-background)]"
+                  : "border border-white/15 bg-white/5 text-white"
+              }`}
+            >
+              <FaUser className="h-3 w-3" />
+              My Post
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -552,10 +627,14 @@ export default function NewsFeed() {
         )}
 
         {loading ? (
-          <p className="px-4 py-8 text-sm text-[var(--color-muted)]">Loading feed...</p>
+          <p className="px-4 py-8 text-sm text-[var(--color-muted)]">
+            {feedMode === "mine" ? "Loading your posts..." : "Loading feed..."}
+          </p>
         ) : posts.length === 0 ? (
           <p className="px-4 py-8 text-sm text-[var(--color-muted)]">
-            No posts yet. Be the first to share something.
+            {feedMode === "mine"
+              ? "You have not posted anything yet. Tap Add Post to share something."
+              : "No posts yet. Be the first to share something."}
           </p>
         ) : (
           <div className="divide-y divide-white/5">
@@ -577,7 +656,7 @@ export default function NewsFeed() {
           </div>
         )}
 
-        {nextCursor && (
+        {feedMode === "all" && nextCursor && (
           <div className="px-4 py-4">
             <button
               type="button"
@@ -781,13 +860,13 @@ function PostCard({ post, onLike, onSave, onShare, onComment, onEdit, onDelete }
           <button type="button" onClick={onShare} className="text-white" aria-label="Share">
             <FiShare2 className="h-6 w-6" strokeWidth={2} />
           </button>
-          <button type="button" onClick={onSave} className="text-white" aria-label="Save">
+          {/* <button type="button" onClick={onSave} className="text-white" aria-label="Save">
             {post.savedByMe ? (
               <FaBookmark className="h-5 w-5 text-[var(--color-primary)]" />
             ) : (
               <FaRegBookmark className="h-5 w-5" />
             )}
-          </button>
+          </button> */}
         </div>
       </div>
 

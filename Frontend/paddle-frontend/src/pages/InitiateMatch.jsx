@@ -86,6 +86,7 @@ export default function InitiateMatch() {
   const [playerIds, setPlayerIds] = useState([]);
   const [allowJoin, setAllowJoin] = useState(false);
   const [refereeId, setRefereeId] = useState("");
+  const [allocateByOrg, setAllocateByOrg] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -165,8 +166,8 @@ export default function InitiateMatch() {
 
   const submit = async () => {
     setError("");
-    if (!refereeId) {
-      setError("Select a referee available for this court.");
+    if (!allocateByOrg && !refereeId) {
+      setError("Select a referee, or let the organization allocate one.");
       return;
     }
     setSaving(true);
@@ -178,7 +179,9 @@ export default function InitiateMatch() {
         playerIds,
         isPublic: allowJoin,
         ...(allowJoin ? { openSlots: remaining } : {}),
-        refereeId,
+        ...(allocateByOrg
+          ? { allocateRefereeByOrg: true }
+          : { refereeId }),
       });
       navigate("/matches");
     } catch (err) {
@@ -422,22 +425,56 @@ export default function InitiateMatch() {
         {step === 3 && (
           <>
             <p className="text-sm text-white/50">
-              Referees available for {selectedCourt?.name} at{" "}
-              {formatSlotLabel(selectedSlot?.startTime)}
+              Choose a referee for {selectedCourt?.name} at{" "}
+              {formatSlotLabel(selectedSlot?.startTime)}, or let the club allocate
+              one.
             </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                setAllocateByOrg(true);
+                setRefereeId("");
+              }}
+              className={`flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left ${
+                allocateByOrg
+                  ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
+                  : "border-white/10 bg-[var(--color-surface)]"
+              }`}
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-[var(--color-primary)]">
+                <FaClipboardCheck className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white">
+                  Let allocate by organization
+                </p>
+                <p className="mt-0.5 text-[11px] text-white/45">
+                  The padel club will assign a referee for this match.
+                </p>
+              </div>
+              {allocateByOrg && (
+                <FaCheck className="mt-1 h-3.5 w-3.5 shrink-0 text-[var(--color-primary)]" />
+              )}
+            </button>
+
             {referees.length === 0 ? (
               <p className="text-sm text-white/40">
-                No referees are available for this court and time.
+                No referees are listed as available right now. You can still ask
+                the organization to allocate one.
               </p>
             ) : (
               <ul className="space-y-2">
                 {referees.map((r) => {
-                  const on = refereeId === r.id;
+                  const on = !allocateByOrg && refereeId === r.id;
                   return (
                     <li key={r.id}>
                       <button
                         type="button"
-                        onClick={() => setRefereeId(r.id)}
+                        onClick={() => {
+                          setAllocateByOrg(false);
+                          setRefereeId(r.id);
+                        }}
                         className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left ${
                           on
                             ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"

@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaClipboardCheck, FaEnvelope, FaLock } from "react-icons/fa";
+import { FaClipboardCheck, FaLock, FaPhone } from "react-icons/fa";
 import AuthInput from "../../components/AuthInput";
 import { refereeLogin, refereeRegister } from "../../api/referee";
+import { sanitizePhone } from "../../utils/authFields";
 
 export default function RefereeRegister() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -16,13 +17,13 @@ export default function RefereeRegister() {
     setError("");
     setLoading(true);
     try {
-      const emailValue = email.trim().toLowerCase();
+      const phone = phoneNumber.trim();
       await refereeRegister({
-        email: emailValue,
+        phoneNumber: phone,
         password,
       });
       const { data } = await refereeLogin({
-        email: emailValue,
+        phoneNumber: phone,
         password,
       });
       const token = data?.access_token || data?.accessToken;
@@ -54,8 +55,8 @@ export default function RefereeRegister() {
           </div>
           <h1 className="text-2xl font-bold text-white">Referee Register</h1>
           <p className="mt-2 text-sm text-[var(--color-muted)]">
-            Sign up with email and password. You can finish your profile after
-            you log in.
+            Sign up with phone number and password. You can finish your profile
+            after you log in.
           </p>
         </div>
 
@@ -65,14 +66,15 @@ export default function RefereeRegister() {
         >
           <div className="flex flex-col gap-5">
             <AuthInput
-              label="Email"
-              icon={FaEnvelope}
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="referee@email.com"
+              label="Phone number"
+              icon={FaPhone}
+              type="tel"
+              inputMode="tel"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(sanitizePhone(e.target.value))}
+              placeholder="03XXXXXXXXX"
               required
-              autoComplete="email"
+              autoComplete="tel"
             />
             <AuthInput
               label="Password"

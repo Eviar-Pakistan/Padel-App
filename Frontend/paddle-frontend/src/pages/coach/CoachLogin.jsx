@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaEnvelope, FaLock, FaUserTie } from "react-icons/fa";
+import { FaLock, FaPhone, FaUserTie } from "react-icons/fa";
 import AuthInput from "../../components/AuthInput";
 import { coachLogin } from "../../api/coach";
+import { sanitizePhone } from "../../utils/authFields";
 
 export default function CoachLogin() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,7 +18,7 @@ export default function CoachLogin() {
     setLoading(true);
     try {
       const { data } = await coachLogin({
-        email: email.trim(),
+        phoneNumber: phoneNumber.trim(),
         password,
       });
       const token = data?.access_token || data?.accessToken;
@@ -51,7 +52,7 @@ export default function CoachLogin() {
           </div>
           <h1 className="text-2xl font-bold text-white">Coach Login</h1>
           <p className="mt-2 text-sm text-[var(--color-muted)]">
-            Sign in to manage bookings, profile, and chats
+            Sign in with your phone number and password
           </p>
         </div>
 
@@ -61,14 +62,15 @@ export default function CoachLogin() {
         >
           <div className="flex flex-col gap-5">
             <AuthInput
-              label="Email"
-              icon={FaEnvelope}
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="coach@email.com"
+              label="Phone number"
+              icon={FaPhone}
+              type="tel"
+              inputMode="tel"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(sanitizePhone(e.target.value))}
+              placeholder="03XXXXXXXXX"
               required
-              autoComplete="username"
+              autoComplete="tel"
             />
             <AuthInput
               label="Password"

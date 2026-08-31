@@ -48,6 +48,22 @@ function mediaUrl(path) {
   return `${origin}${path}`;
 }
 
+function matchChatTitle(c) {
+  if (c?.displayTitle) return c.displayTitle;
+  const court = c?.court?.name || c?.title || "Match";
+  const players = (c?.participants || []).filter((p) => p.status === "ACCEPTED");
+  const names = (team) =>
+    players
+      .filter((p) => (team === 1 ? Number(p.team) === 1 : Number(p.team) !== 1))
+      .map((p) => p.user?.fullName)
+      .filter(Boolean)
+      .join(" / ");
+  const a = names(0);
+  const b = names(1);
+  if (!a && !b) return c?.title || court;
+  return `${court} · ${a || "Team A"} vs ${b || "Team B"}`;
+}
+
 function refereeIdFromJwt() {
   try {
     const token = localStorage.getItem("refereeAccessToken");
@@ -308,8 +324,11 @@ export default function RefereeDashboard() {
     try {
       const fd = new FormData();
       fd.append("fullName", form.fullName.trim());
-      fd.append("email", form.email.trim());
+      if (!form.phoneNumber.trim()) {
+        throw new Error("Phone number is required.");
+      }
       fd.append("phoneNumber", form.phoneNumber.trim());
+      fd.append("email", form.email.trim());
       fd.append("location", form.location || "");
       fd.append("province", form.province || "");
       if (form.hourlyRate !== "") {
@@ -355,8 +374,12 @@ export default function RefereeDashboard() {
       <div className="h-dvh overflow-hidden bg-[var(--color-background)] text-white">
         <ChatThread
           group={{
-            name: activeChat.title || activeChat.court?.name || "Match",
-            _count: { members: 4 },
+            name: matchChatTitle(activeChat),
+            _count: {
+              members:
+                activeChat.participants?.filter((p) => p.status === "ACCEPTED")
+                  .length || 4,
+            },
           }}
           messages={messages}
           me={{ kind: "referee", id: meId }}
@@ -366,6 +389,11 @@ export default function RefereeDashboard() {
           }}
           onSend={onSend}
           sending={sending}
+          headerRight={
+            <span className="shrink-0 rounded-full bg-[var(--color-primary)]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--color-primary)]">
+              Match
+            </span>
+          }
         />
       </div>
     );
@@ -489,10 +517,19 @@ export default function RefereeDashboard() {
                         Match time ended · scoring closed
                       </p>
                     )}
-                    {m.score?.finished && (
+                    {m.score?.finished && !m.needsRefereeRanking && (
                       <p className="mt-2 text-[11px] font-semibold text-[var(--color-primary)]">
                         Result saved
                       </p>
+                    )}
+                    {m.needsRefereeRanking && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/referee/matches/${m.id}`)}
+                        className="mt-2 w-full rounded-xl bg-amber-400 py-2 text-xs font-bold text-[var(--color-background)]"
+                      >
+                        Rank players (required)
+                      </button>
                     )}
                   </li>
                   ))}
@@ -529,7 +566,7 @@ export default function RefereeDashboard() {
                             unread > 0 ? "font-bold text-white" : "font-semibold"
                           }`}
                         >
-                          {c.title || c.court?.name || "Match"}
+                          {matchChatTitle(c)}
                         </p>
                         <p
                           className={`truncate text-xs ${
@@ -541,11 +578,16 @@ export default function RefereeDashboard() {
                           {lastPreview(c)}
                         </p>
                       </div>
-                      {unread > 0 && (
-                        <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)] px-1.5 text-[10px] font-bold text-[var(--color-background)]">
-                          {unread > 99 ? "99+" : unread}
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span className="rounded-full bg-[var(--color-primary)]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--color-primary)]">
+                          Match
                         </span>
-                      )}
+                        {unread > 0 && (
+                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-primary)] px-1.5 text-[10px] font-bold text-[var(--color-background)]">
+                            {unread > 99 ? "99+" : unread}
+                          </span>
+                        )}
+                      </div>
                     </button>
                   </li>
                   );
@@ -606,17 +648,9 @@ export default function RefereeDashboard() {
                 />
               </label>
               <label className="block text-sm text-white/70">
-                Email
+                Phone number (login)
                 <input
-                  type="email"
-                  value={form.email || ""}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
-                />
-              </label>
-              <label className="block text-sm text-white/70">
-                Phone number
-                <input
+                  required
                   value={form.phoneNumber || ""}
                   inputMode="tel"
                   onChange={(e) =>
@@ -625,6 +659,15 @@ export default function RefereeDashboard() {
                       phoneNumber: sanitizePhone(e.target.value),
                     }))
                   }
+                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
+                />
+              </label>
+              <label className="block text-sm text-white/70">
+                Email (optional)
+                <input
+                  type="email"
+                  value={form.email || ""}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                   className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
                 />
               </label>

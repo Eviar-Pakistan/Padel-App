@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaEnvelope, FaLock, FaUserTie } from "react-icons/fa";
+import { FaLock, FaPhone, FaUserTie } from "react-icons/fa";
 import AuthInput from "../../components/AuthInput";
 import { coachLogin, coachRegister } from "../../api/coach";
+import { sanitizePhone } from "../../utils/authFields";
 
 export default function CoachRegister() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -16,13 +17,13 @@ export default function CoachRegister() {
     setError("");
     setLoading(true);
     try {
-      const emailValue = email.trim().toLowerCase();
+      const phone = phoneNumber.trim();
       await coachRegister({
-        email: emailValue,
+        phoneNumber: phone,
         password,
       });
       const { data } = await coachLogin({
-        email: emailValue,
+        phoneNumber: phone,
         password,
       });
       const token = data?.access_token || data?.accessToken;
@@ -54,8 +55,8 @@ export default function CoachRegister() {
           </div>
           <h1 className="text-2xl font-bold text-white">Coach Register</h1>
           <p className="mt-2 text-sm text-[var(--color-muted)]">
-            Sign up with email and password. You can finish your profile after
-            you log in.
+            Sign up with phone number and password. You can finish your profile
+            after you log in.
           </p>
         </div>
 
@@ -65,14 +66,15 @@ export default function CoachRegister() {
         >
           <div className="flex flex-col gap-5">
             <AuthInput
-              label="Email"
-              icon={FaEnvelope}
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="coach@email.com"
+              label="Phone number"
+              icon={FaPhone}
+              type="tel"
+              inputMode="tel"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(sanitizePhone(e.target.value))}
+              placeholder="03XXXXXXXXX"
               required
-              autoComplete="email"
+              autoComplete="tel"
             />
             <AuthInput
               label="Password"

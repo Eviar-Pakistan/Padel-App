@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaClipboardCheck, FaEnvelope, FaLock } from "react-icons/fa";
+import { FaClipboardCheck, FaLock, FaPhone } from "react-icons/fa";
 import AuthInput from "../../components/AuthInput";
 import { refereeLogin } from "../../api/referee";
+import { sanitizePhone } from "../../utils/authFields";
 
 export default function RefereeLogin() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,7 +18,7 @@ export default function RefereeLogin() {
     setLoading(true);
     try {
       const { data } = await refereeLogin({
-        email: email.trim(),
+        phoneNumber: phoneNumber.trim(),
         password,
       });
       const token = data?.access_token || data?.accessToken;
@@ -51,7 +52,7 @@ export default function RefereeLogin() {
           </div>
           <h1 className="text-2xl font-bold text-white">Referee Login</h1>
           <p className="mt-2 text-sm text-[var(--color-muted)]">
-            Sign in to manage your availability and courts
+            Sign in with your phone number and password
           </p>
         </div>
 
@@ -61,14 +62,15 @@ export default function RefereeLogin() {
         >
           <div className="flex flex-col gap-5">
             <AuthInput
-              label="Email"
-              icon={FaEnvelope}
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="referee@email.com"
+              label="Phone number"
+              icon={FaPhone}
+              type="tel"
+              inputMode="tel"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(sanitizePhone(e.target.value))}
+              placeholder="03XXXXXXXXX"
               required
-              autoComplete="username"
+              autoComplete="tel"
             />
             <AuthInput
               label="Password"

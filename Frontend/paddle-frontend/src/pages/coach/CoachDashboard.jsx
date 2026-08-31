@@ -355,8 +355,11 @@ export default function CoachDashboard() {
       }
       fd.append("firstName", firstName);
       fd.append("lastName", lastName);
-      fd.append("email", profileForm.email.trim());
+      if (!profileForm.phoneNumber.trim()) {
+        throw new Error("Phone number is required.");
+      }
       fd.append("phoneNumber", profileForm.phoneNumber.trim());
+      fd.append("email", profileForm.email.trim());
       if (profileForm.gender) fd.append("gender", profileForm.gender);
       if (profileForm.bio.trim()) fd.append("bio", profileForm.bio.trim());
       if (profileForm.sessionRate !== "") {
@@ -699,20 +702,9 @@ export default function CoachDashboard() {
               />
             </label>
             <label className="block text-sm text-white/70">
-              Email
+              Phone number (login)
               <input
-                type="email"
                 required
-                value={profileForm.email || ""}
-                onChange={(e) =>
-                  setProfileForm((f) => ({ ...f, email: e.target.value }))
-                }
-                className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
-              />
-            </label>
-            <label className="block text-sm text-white/70">
-              Phone
-              <input
                 inputMode="tel"
                 value={profileForm.phoneNumber || ""}
                 onChange={(e) =>
@@ -720,6 +712,17 @@ export default function CoachDashboard() {
                     ...f,
                     phoneNumber: sanitizePhone(e.target.value),
                   }))
+                }
+                className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
+              />
+            </label>
+            <label className="block text-sm text-white/70">
+              Email (optional)
+              <input
+                type="email"
+                value={profileForm.email || ""}
+                onChange={(e) =>
+                  setProfileForm((f) => ({ ...f, email: e.target.value }))
                 }
                 className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0e1821] px-3 py-2.5 text-sm text-white outline-none"
               />

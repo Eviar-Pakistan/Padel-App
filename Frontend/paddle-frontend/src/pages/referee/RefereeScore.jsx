@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FaArrowLeft, FaUndo } from "react-icons/fa";
+import { FaArrowLeft, FaFlagCheckered, FaUndo } from "react-icons/fa";
 import LiveScoreBoard, { teamsFromMatch } from "../../components/LiveScoreBoard";
+import MatchRankingModal from "../../components/MatchRankingModal";
 import {
   getRefereeMatch,
   scoreRefereeMatch,
+  submitRefereeMatchRankings,
 } from "../../api/referee";
 import { useMatchLiveSocket } from "../../hooks/useMatchLiveSocket";
 import { useAuthToken } from "../../hooks/useMatchLiveFeed";
@@ -36,8 +38,10 @@ export default function RefereeScore() {
   const token = useAuthToken("refereeAccessToken");
   const [match, setMatch] = useState(null);
   const [error, setError] = useState("");
+  const [rankError, setRankError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [rankingBusy, setRankingBusy] = useState(false);
   const [, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -67,22 +71,57 @@ export default function RefereeScore() {
   });
 
   const { left, right } = teamsFromMatch(match);
-  const finished = Boolean(match?.score?.finished);
+  const finished = Boolean(match?.score?.finished) || match?.lifecycle === "COMPLETED";
   const timeEnded = matchTimeEnded(match) || match?.lifecycle === "COMPLETED";
   const canScore = Boolean(match) && match.lifecycle === "LIVE" && !finished && !timeEnded;
+  const needsRanking = Boolean(match?.needsRefereeRanking);
 
   const send = async (kind, team) => {
-    if (!canScore) return;
+    if (kind !== "END" && !canScore) return;
+    if (kind === "END" && (finished || (!canScore && !timeEnded))) return;
     setBusy(true);
     setError("");
     try {
-      const { data } = await scoreRefereeMatch(id, { kind, team });
+      const payload = kind === "END" ? { kind: "END" } : { kind, team };
+      const { data } = await scoreRefereeMatch(id, payload);
       setMatch(data);
     } catch (err) {
       const msg = err.response?.data?.message;
       setError(Array.isArray(msg) ? msg.join(", ") : msg || "Could not update score.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const endMatch = () => {
+    const sets = match?.score;
+    const summary =
+      sets != null
+        ? `Current score — Sets ${sets.setA ?? 0}–${sets.setB ?? 0}, Games ${sets.gameA ?? 0}–${sets.gameB ?? 0}. The leading team wins.`
+        : "The leading team on sets (then games, then points) will be declared the winner.";
+    if (
+      !window.confirm(
+        `End this match now?\n\n${summary}\n\nPlayers will then rank each other.`
+      )
+    ) {
+      return;
+    }
+    send("END");
+  };
+
+  const onSubmitRankings = async (rankings) => {
+    setRankingBusy(true);
+    setRankError("");
+    try {
+      const { data } = await submitRefereeMatchRankings(id, rankings);
+      setMatch(data);
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setRankError(
+        Array.isArray(msg) ? msg.join(", ") : msg || "Could not save rankings."
+      );
+    } finally {
+      setRankingBusy(false);
     }
   };
 
@@ -118,12 +157,28 @@ export default function RefereeScore() {
             <LiveScoreBoard match={match} />
             {finished ? (
               <p className="rounded-2xl border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-4 py-3 text-center text-sm font-semibold text-[var(--color-primary)]">
-                Match complete. Winning team received +1 win and +50 points each.
+                {needsRanking
+                  ? "Match complete. Rank all 4 players to unlock final points."
+                  : match.rankingsComplete
+                    ? "Match complete. Rankings saved — points awarded."
+                    : "Match complete. Waiting for player rankings before points are awarded."}
               </p>
             ) : timeEnded ? (
-              <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white/70">
-                Match time has ended. Scoring is closed.
-              </p>
+              <div className="space-y-3">
+                <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white/70">
+                  Match time has ended. Scoring is closed — you can still end
+                  the match from the current score.
+                </p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={endMatch}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-red-500/90 py-3 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  <FaFlagCheckered className="h-3.5 w-3.5" />
+                  End match
+                </button>
+              </div>
             ) : !canScore ? (
               <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-semibold text-white/70">
                 Scoring opens when the match goes live.
@@ -173,15 +228,35 @@ export default function RefereeScore() {
                   <FaUndo className="h-3.5 w-3.5" />
                   Undo last point
                 </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={endMatch}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-red-500/90 py-3 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  <FaFlagCheckered className="h-3.5 w-3.5" />
+                  End match
+                </button>
                 <p className="text-center text-[11px] text-white/40">
-                  Golden point at 40–40. First to 6 games (win by 2). Best of 3
-                  sets. Tie-break at 6–6.
+                  Deuce at 40–40, then Advantage. Win by 2 points after deuce.
+                  First to 6 games (win by 2). Best of 3 sets. Tie-break at 6–6.
+                  End match uses the current sets/games lead as the final result.
                 </p>
               </>
             )}
           </>
         ) : null}
       </main>
+
+      <MatchRankingModal
+        open={needsRanking}
+        mode="referee"
+        matchTitle={match?.court?.name || "Match"}
+        players={match?.rankablePlayers || match?.participants || []}
+        onSubmit={onSubmitRankings}
+        submitting={rankingBusy}
+        error={rankError}
+      />
     </div>
   );
 }
