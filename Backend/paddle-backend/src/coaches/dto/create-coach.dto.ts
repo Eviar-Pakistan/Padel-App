@@ -67,12 +67,17 @@ export class CreateCoachDto {
   @IsString()
   lastName?: string;
 
-  @IsEmail()
-  email!: string;
-
   @IsOptional()
+  @Transform(({ value }) => {
+    const s = toOptionalString(value);
+    return s ? s.toLowerCase() : undefined;
+  })
+  @IsEmail()
+  email?: string;
+
   @IsString()
-  phoneNumber?: string;
+  @MinLength(1)
+  phoneNumber!: string;
 
   @IsString()
   @MinLength(4)

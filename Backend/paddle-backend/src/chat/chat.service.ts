@@ -59,7 +59,7 @@ export class ChatService {
 
   findMine(paddleOwnerId: number) {
     return this.prisma.chatGroup.findMany({
-      where: { paddleOwnerId },
+      where: { paddleOwnerId, courtBooking: null },
       orderBy: { updatedAt: 'desc' },
       include: this.groupListInclude(),
     });
@@ -144,27 +144,84 @@ export class ChatService {
   }
 
   async findAllForUser(userId: number) {
+    // Community groups are public; court-booking groups only for members.
     const groups = await this.prisma.chatGroup.findMany({
+      where: {
+        OR: [
+          { courtBooking: null },
+          { members: { some: { userId } } },
+        ],
+      },
       orderBy: { updatedAt: 'desc' },
       include: {
         ...this.groupListInclude(),
-        members: { where: { userId }, select: { id: true } },
+        members: {
+          where: { userId },
+          select: { id: true, lastReadAt: true, joinedAt: true },
+        },
         joinRequests: {
           where: { userId },
           select: { id: true, status: true },
           take: 1,
         },
+        courtBooking: {
+          select: {
+            id: true,
+            bookingDate: true,
+            court: { select: { name: true } },
+            timeSlot: { select: { startTime: true } },
+          },
+        },
       },
     });
-    return groups.map((g) => {
-      const { members, joinRequests, ...rest } = g;
-      return {
-        ...rest,
-        isMember: members.length > 0,
-        joinStatus: joinRequests[0]?.status || null,
-        joinRequestId: joinRequests[0]?.id || null,
-      };
-    });
+    return Promise.all(
+      groups.map(async (g) => {
+        const { members, joinRequests, courtBooking, ...rest } = g;
+        const isMember = members.length > 0;
+        let unreadCount = 0;
+        if (isMember) {
+          // Prefer last read; otherwise only count messages after joining.
+          const since = members[0].lastReadAt ?? members[0].joinedAt;
+          unreadCount = await this.prisma.chatMessage.count({
+            where: {
+              groupId: g.id,
+              NOT: {
+                AND: [{ senderUserId: userId }, { senderOwnerId: null }],
+              },
+              ...(since ? { createdAt: { gt: since } } : {}),
+            },
+          });
+        }
+        const isCourtBookingGroup = Boolean(courtBooking);
+        let displayTitle = rest.name;
+        if (isCourtBookingGroup) {
+          const dateStr = courtBooking?.bookingDate
+            ? new Date(courtBooking.bookingDate).toISOString().slice(0, 10)
+            : '';
+          const built = [
+            courtBooking?.court?.name,
+            dateStr,
+            courtBooking?.timeSlot?.startTime,
+          ]
+            .filter(Boolean)
+            .join(' · ');
+          displayTitle =
+            built ||
+            rest.description ||
+            (rest.name === 'Court Booking' ? 'Court Booking' : rest.name);
+        }
+        return {
+          ...rest,
+          courtBooking,
+          isCourtBookingGroup,
+          displayTitle,
+          isMember,
+          joinStatus: joinRequests[0]?.status || null,
+          joinRequestId: joinRequests[0]?.id || null,
+          unreadCount,
+        };
+      }),
+    );
   }
 
   async findOne(id: string, auth: { userId: number; role?: string }) {
@@ -182,6 +239,15 @@ export class ChatService {
 
   async requestJoin(userId: number, groupId: string) {
     await this.getGroup(groupId);
+    const bookingLink = await this.prisma.courtBooking.findUnique({
+      where: { chatGroupId: groupId },
+      select: { id: true },
+    });
+    if (bookingLink) {
+      throw new ForbiddenException(
+        'This chat is only for players on that court booking',
+      );
+    }
     const member = await this.prisma.chatGroupMember.findUnique({
       where: { groupId_userId: { groupId, userId } },
     });

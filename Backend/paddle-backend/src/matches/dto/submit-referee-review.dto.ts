@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
-export class CreateCoachReviewDto {
+export class SubmitRefereeReviewDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)

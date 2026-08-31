@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -46,10 +47,24 @@ export class RefereesService {
   };
 
   async create(dto: CreateRefereeDto, file?: Express.Multer.File, paddleOwnerId?: number, createdBy: AccountCreatedBy = AccountCreatedBy.SELF) {
-    const email = dto.email.trim().toLowerCase();
-    const existing = await this.prisma.referee.findUnique({ where: { email } });
-    if (existing) {
-      throw new ConflictException('Email already registered');
+    const phoneNumber = dto.phoneNumber.trim();
+    if (!phoneNumber) {
+      throw new BadRequestException('Phone number is required');
+    }
+    const phoneTaken = await this.prisma.referee.findUnique({
+      where: { phoneNumber },
+    });
+    if (phoneTaken) {
+      throw new ConflictException('Phone number already registered');
+    }
+    const email = dto.email?.trim()
+      ? dto.email.trim().toLowerCase()
+      : null;
+    if (email) {
+      const emailTaken = await this.prisma.referee.findUnique({ where: { email } });
+      if (emailTaken) {
+        throw new ConflictException('Email already registered');
+      }
     }
 
     const profileImage = await this.imageUpload.saveProfileImage(file);
@@ -60,7 +75,7 @@ export class RefereesService {
       data: {
         fullName: dto.fullName?.trim() || '',
         email,
-        phoneNumber: dto.phoneNumber?.trim() || '',
+        phoneNumber,
         password: passwordHash,
         profileImage,
         location: dto.location?.trim() || undefined,
@@ -84,7 +99,7 @@ export class RefereesService {
 
   async login(dto: RefereeLoginDto) {
     const referee = await this.prisma.referee.findUnique({
-      where: { email: dto.email.trim().toLowerCase() },
+      where: { phoneNumber: dto.phoneNumber.trim() },
     });
     if (!referee?.password) {
       throw new UnauthorizedException('Invalid credentials');
@@ -98,7 +113,7 @@ export class RefereesService {
     }
     const access_token = await this.jwtService.signAsync({
       sub: referee.id,
-      email: referee.email,
+      phoneNumber: referee.phoneNumber,
       role: Roles.REFEREE,
     });
     return {
@@ -138,7 +153,19 @@ export class RefereesService {
     const existing = await this.prisma.referee.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Referee not found');
 
-    if (dto.email) {
+    if (dto.phoneNumber !== undefined) {
+      const phoneNumber = dto.phoneNumber.trim();
+      if (!phoneNumber) {
+        throw new BadRequestException('Phone number is required');
+      }
+      const phoneClash = await this.prisma.referee.findFirst({
+        where: { phoneNumber, NOT: { id } },
+      });
+      if (phoneClash) {
+        throw new ConflictException('Phone number already registered');
+      }
+    }
+    if (dto.email !== undefined && dto.email?.trim()) {
       const email = dto.email.trim().toLowerCase();
       const clash = await this.prisma.referee.findFirst({
         where: { email, NOT: { id } },
@@ -153,8 +180,12 @@ export class RefereesService {
 
     const data: Prisma.RefereeUpdateInput = {
       fullName: dto.fullName?.trim(),
-      phoneNumber: dto.phoneNumber?.trim(),
-      ...(dto.email ? { email: dto.email.trim().toLowerCase() } : {}),
+      ...(dto.phoneNumber !== undefined
+        ? { phoneNumber: dto.phoneNumber.trim() }
+        : {}),
+      ...(dto.email !== undefined
+        ? { email: dto.email?.trim() ? dto.email.trim().toLowerCase() : null }
+        : {}),
       ...(profileImage ? { profileImage } : {}),
       ...(passwordHash ? { password: passwordHash } : {}),
       ...(dto.location !== undefined ? { location: dto.location } : {}),

@@ -100,10 +100,24 @@ export class CoachesService {
     paddleOwnerId?: number,
     createdBy: AccountCreatedBy = AccountCreatedBy.SELF,
   ) {
-    const email = dto.email.trim().toLowerCase();
-    const existing = await this.prisma.coach.findUnique({ where: { email } });
-    if (existing) {
-      throw new ConflictException('Email already registered');
+    const phoneNumber = dto.phoneNumber.trim();
+    if (!phoneNumber) {
+      throw new BadRequestException('Phone number is required');
+    }
+    const phoneTaken = await this.prisma.coach.findUnique({
+      where: { phoneNumber },
+    });
+    if (phoneTaken) {
+      throw new ConflictException('Phone number already registered');
+    }
+    const email = dto.email?.trim()
+      ? dto.email.trim().toLowerCase()
+      : null;
+    if (email) {
+      const emailTaken = await this.prisma.coach.findUnique({ where: { email } });
+      if (emailTaken) {
+        throw new ConflictException('Email already registered');
+      }
     }
 
     const profileImage = await this.imageUpload.saveProfileImage(file);
@@ -114,7 +128,7 @@ export class CoachesService {
         lastName: dto.lastName?.trim() || '',
         profileImage,
         email,
-        phoneNumber: dto.phoneNumber?.trim() || '',
+        phoneNumber,
         password: passwordHash,
         gender: dto.gender,
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
@@ -144,7 +158,7 @@ export class CoachesService {
 
   async login(dto: CoachLoginDto) {
     const coach = await this.prisma.coach.findUnique({
-      where: { email: dto.email.trim().toLowerCase() },
+      where: { phoneNumber: dto.phoneNumber.trim() },
     });
     if (!coach?.password) {
       throw new UnauthorizedException('Invalid credentials');
@@ -158,7 +172,7 @@ export class CoachesService {
     }
     const access_token = await this.jwtService.signAsync({
       sub: coach.id,
-      email: coach.email,
+      phoneNumber: coach.phoneNumber,
       role: Roles.COACH,
     });
     return {
@@ -229,6 +243,27 @@ export class CoachesService {
     paddleOwnerId?: number,
   ) {
     const existing = await this.findOne(id);
+    if (dto.phoneNumber !== undefined) {
+      const phoneNumber = dto.phoneNumber.trim();
+      if (!phoneNumber) {
+        throw new BadRequestException('Phone number is required');
+      }
+      const phoneClash = await this.prisma.coach.findFirst({
+        where: { phoneNumber, NOT: { id } },
+      });
+      if (phoneClash) {
+        throw new ConflictException('Phone number already registered');
+      }
+    }
+    if (dto.email !== undefined && dto.email?.trim()) {
+      const email = dto.email.trim().toLowerCase();
+      const emailClash = await this.prisma.coach.findFirst({
+        where: { email, NOT: { id } },
+      });
+      if (emailClash) {
+        throw new ConflictException('Email already registered');
+      }
+    }
     const profileImage = await this.imageUpload.saveProfileImage(file);
     const passwordHash = dto.password
       ? await bcrypt.hash(dto.password, 10)
@@ -242,8 +277,12 @@ export class CoachesService {
         ...(profileImage ? { profileImage } : {}),
         ...(paddleOwnerId && !existing.paddleOwnerId ? { paddleOwnerId } : {}),
         ...(passwordHash ? { password: passwordHash } : {}),
-        ...(dto.email ? { email: dto.email.trim().toLowerCase() } : {}),
-        phoneNumber: dto.phoneNumber,
+        ...(dto.email !== undefined
+          ? { email: dto.email?.trim() ? dto.email.trim().toLowerCase() : null }
+          : {}),
+        ...(dto.phoneNumber !== undefined
+          ? { phoneNumber: dto.phoneNumber.trim() }
+          : {}),
         gender: dto.gender,
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
         nationality: dto.nationality,
@@ -290,6 +329,25 @@ export class CoachesService {
     });
   }
 
+  /** Session finished: COMPLETED, or CONFIRMED and end time has passed. */
+  private isPastCompletedSession(booking: {
+    status: BookingStatus;
+    bookingDate: Date;
+    endTime: string;
+  }) {
+    if (booking.status === BookingStatus.CANCELLED) return false;
+    if (booking.status === BookingStatus.COMPLETED) return true;
+    if (booking.status !== BookingStatus.CONFIRMED) return false;
+    const key = String(booking.bookingDate).slice(0, 10);
+    const [y, mo, d] = key.split('-').map(Number);
+    const [eh, em = 0] = String(booking.endTime || '00:00')
+      .split(':')
+      .map(Number);
+    if (![y, mo, d].every((n) => Number.isFinite(n))) return false;
+    const end = new Date(y, mo - 1, d, eh || 0, em || 0, 0, 0);
+    return Date.now() >= end.getTime();
+  }
+
   async addReview(coachId: string, userId: number, dto: CreateCoachReviewDto) {
     await this.findOne(coachId);
 
@@ -302,12 +360,27 @@ export class CoachesService {
       throw new ConflictException('You have already reviewed this coach');
     }
 
+    const bookings = await this.prisma.coachBooking.findMany({
+      where: {
+        coachId,
+        userId,
+        status: { in: [BookingStatus.CONFIRMED, BookingStatus.COMPLETED] },
+      },
+    });
+    const eligible = bookings.some((b) => this.isPastCompletedSession(b));
+    if (!eligible) {
+      throw new BadRequestException(
+        'You can only review a coach after a completed session with them.',
+      );
+    }
+
+    const comment = dto.comment?.trim() || undefined;
     const review = await this.prisma.coachReview.create({
       data: {
         coachId,
         userId,
         rating: dto.rating,
-        comment: dto.comment,
+        comment,
       },
       include: {
         user: {
@@ -379,11 +452,37 @@ export class CoachesService {
     });
   }
 
-  findMyBookings(userId: number) {
-    return this.prisma.coachBooking.findMany({
+  async findMyBookings(userId: number) {
+    const rows = await this.prisma.coachBooking.findMany({
       where: { userId },
       orderBy: [{ bookingDate: 'desc' }, { startTime: 'asc' }],
       include: this.bookingInclude,
+    });
+    const coachIds = [...new Set(rows.map((r) => r.coachId))];
+    const myReviews =
+      coachIds.length === 0
+        ? []
+        : await this.prisma.coachReview.findMany({
+            where: { userId, coachId: { in: coachIds } },
+            select: { coachId: true, rating: true, comment: true, createdAt: true },
+          });
+    const reviewByCoach = new Map(myReviews.map((r) => [r.coachId, r]));
+
+    return rows.map((b) => {
+      const myReview = reviewByCoach.get(b.coachId) || null;
+      const sessionDone = this.isPastCompletedSession(b);
+      const isPrevious =
+        sessionDone ||
+        b.status === BookingStatus.CANCELLED ||
+        b.status === BookingStatus.COMPLETED;
+      return {
+        ...b,
+        isPrevious,
+        sessionDone,
+        hasReviewed: Boolean(myReview),
+        canReview: sessionDone && !myReview,
+        myReview,
+      };
     });
   }
 
@@ -599,8 +698,8 @@ export class CoachesService {
     );
   }
 
-  listUserCoachConversations(userId: number) {
-    return this.prisma.coachConversation.findMany({
+  async listUserCoachConversations(userId: number) {
+    const conversations = await this.prisma.coachConversation.findMany({
       where: { userId },
       orderBy: { updatedAt: 'desc' },
       include: {
@@ -615,6 +714,21 @@ export class CoachesService {
         messages: { orderBy: { createdAt: 'desc' }, take: 1 },
       },
     });
+
+    return Promise.all(
+      conversations.map(async (c) => {
+        const unreadCount = await this.prisma.coachConversationMessage.count({
+          where: {
+            conversationId: c.id,
+            senderCoachId: { not: null },
+            ...(c.userLastReadAt
+              ? { createdAt: { gt: c.userLastReadAt } }
+              : {}),
+          },
+        });
+        return { ...c, unreadCount };
+      }),
+    );
   }
 
   async listConversationMessages(

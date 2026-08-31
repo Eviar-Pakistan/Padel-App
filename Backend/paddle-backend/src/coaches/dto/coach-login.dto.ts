@@ -1,8 +1,9 @@
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsString, MinLength } from 'class-validator';
 
 export class CoachLoginDto {
-  @IsEmail()
-  email!: string;
+  @IsString()
+  @MinLength(1)
+  phoneNumber!: string;
 
   @IsString()
   @MinLength(4)

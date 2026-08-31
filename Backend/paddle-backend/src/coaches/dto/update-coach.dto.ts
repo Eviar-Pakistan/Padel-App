@@ -11,6 +11,7 @@ import {
   Matches,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import {
   Gender,
@@ -69,8 +70,10 @@ export class UpdateCoachDto {
   lastName?: string;
 
   @IsOptional()
+  @Transform(({ value }) => emptyToNull(value))
+  @ValidateIf((_, v) => v !== null && v !== undefined)
   @IsEmail()
-  email?: string;
+  email?: string | null;
 
   @IsOptional()
   @IsString()

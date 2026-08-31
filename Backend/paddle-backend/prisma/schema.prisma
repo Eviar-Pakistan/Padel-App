@@ -60,6 +60,10 @@ model User {
   matchJoinRequests MatchJoinRequest[]
   matchChatMessages MatchChatMessage[]
   matchWatches      MatchWatch[]
+  matchPeerRankingsGiven    MatchPeerRanking[] @relation("PeerRankingRater")
+  matchPeerRankingsReceived MatchPeerRanking[] @relation("PeerRankingTarget")
+  matchRefereeRankings      MatchRefereeRanking[]
+  matchRefereeReviews       MatchRefereeReview[]
 }
 
 model PaddleOwner {
@@ -229,8 +233,8 @@ model Coach {
   firstName          String
   lastName           String
   profileImage       String?
-  email              String       @unique
-  phoneNumber        String
+  email              String?      @unique
+  phoneNumber        String       @unique
   gender             Gender?
   dateOfBirth        DateTime?
   nationality        String?
@@ -269,8 +273,8 @@ enum RefereeStatus {
 model Referee {
   id                String        @id @default(uuid())
   fullName          String
-  email             String        @unique
-  phoneNumber       String
+  email             String?       @unique
+  phoneNumber       String        @unique
   password          String
   profileImage      String?
   location          String?
@@ -284,9 +288,14 @@ model Referee {
   createdBy         AccountCreatedBy @default(SELF)
   paddleOwnerId     Int?
   paddleOwner       PaddleOwner?  @relation(fields: [paddleOwnerId], references: [id], onDelete: SetNull)
+  /// Average of player reviews after matches (1–5)
+  rating            Float         @default(0)
+  totalReviews      Int           @default(0)
   courts            RefereeCourt[]
   matches           Match[]
   matchChatMessages MatchChatMessage[]
+  matchRefereeRankings MatchRefereeRanking[]
+  matchRefereeReviews  MatchRefereeReview[]
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
@@ -446,6 +455,9 @@ model CourtBooking {
   isPublic       Boolean                    @default(false)
   /// Remaining open player spots (out of 4). Owner occupies at least 1.
   availableSlots Int                        @default(0)
+  /// Chat group created when the first join request is accepted
+  chatGroupId    String?                    @unique
+  chatGroup      ChatGroup?                 @relation(fields: [chatGroupId], references: [id], onDelete: SetNull)
   court          Court                      @relation(fields: [courtId], references: [id], onDelete: Cascade)
   timeSlot       CourtTimeSlot              @relation(fields: [timeSlotId], references: [id], onDelete: Cascade)
   user           User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -604,7 +616,7 @@ model NewsCommentLike {
 /// General-purpose notifications (type is a free-form string, not an enum).
 /// receiverId always refers to a User.
 /// senderId is a plain int (User id, PaddleOwner id, etc. depending on type).
-/// Current type examples: "Booking Details", "Shopping Details", "Court Slot Join", "Order Status", "Player Challenge", "Challenge Accepted"
+/// Current type examples: "Booking Details", "Shopping Details", "Court Slot Join", "Order Status", "Player Challenge", "Challenge Accepted", "News Like", "News Comment"
 model Notification {
   id         String   @id @default(uuid())
   receiverId Int
@@ -708,6 +720,7 @@ model ChatGroup {
   members       ChatGroupMember[]
   messages      ChatMessage[]
   joinRequests  ChatJoinRequest[]
+  courtBooking  CourtBooking?
 }
 
 model ChatGroupMember {
@@ -782,6 +795,8 @@ model Match {
   status               MatchStatus        @default(SCHEDULED)
   refereeId            String?
   refereeInviteStatus  MatchInviteStatus?
+  /// Host asked the padel organization to allocate a referee
+  allocateRefereeByOrg Boolean            @default(false)
   scoreJson            String             @default("{}")
   scoreLogJson         String             @default("[]")
   winnerTeam           Int?
@@ -795,6 +810,9 @@ model Match {
   joinRequests         MatchJoinRequest[]
   messages             MatchChatMessage[]
   watches              MatchWatch[]
+  peerRankings         MatchPeerRanking[]
+  refereeRankings      MatchRefereeRanking[]
+  refereeReviews       MatchRefereeReview[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
@@ -831,6 +849,8 @@ model MatchParticipant {
   team      Int               @default(0)
   status    MatchInviteStatus @default(PENDING)
   lastReadAt DateTime?
+  /// Points awarded after peer + referee rankings are complete
+  pointsAwarded Int?
   match     Match             @relation(fields: [matchId], references: [id], onDelete: Cascade)
   user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime          @default(now())
@@ -838,6 +858,63 @@ model MatchParticipant {
 
   @@unique([matchId, userId])
   @@index([userId])
+}
+
+/// After a match, each player ranks the other players (1=best …).
+model MatchPeerRanking {
+  id           String   @id @default(uuid())
+  matchId      String
+  raterId      Int
+  rankedUserId Int
+  /// 1 = top (10 pts), 2 = middle (5), 3 = bottom (0)
+  rank         Int
+  match        Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  rater        User     @relation("PeerRankingRater", fields: [raterId], references: [id], onDelete: Cascade)
+  rankedUser   User     @relation("PeerRankingTarget", fields: [rankedUserId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@unique([matchId, raterId, rankedUserId])
+  @@unique([matchId, raterId, rank])
+  @@index([matchId])
+  @@index([rankedUserId])
+}
+
+/// Referee ranks all players in the match (1=best … 4=lowest).
+model MatchRefereeRanking {
+  id           String   @id @default(uuid())
+  matchId      String
+  refereeId    String
+  rankedUserId Int
+  /// 1=15, 2=10, 3=5, 4=0
+  rank         Int
+  match        Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  referee      Referee  @relation(fields: [refereeId], references: [id], onDelete: Cascade)
+  rankedUser   User     @relation(fields: [rankedUserId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@unique([matchId, rankedUserId])
+  @@unique([matchId, rank])
+  @@index([matchId])
+  @@index([refereeId])
+}
+
+/// Player reviews the referee after ranking peers (rating + optional message).
+model MatchRefereeReview {
+  id        String   @id @default(uuid())
+  matchId   String
+  refereeId String
+  userId    Int
+  rating    Int // 1–5
+  comment   String?
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  referee   Referee  @relation(fields: [refereeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([matchId, userId])
+  @@index([refereeId])
+  @@index([matchId])
 }
 
 model MatchJoinRequest {

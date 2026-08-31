@@ -73,6 +73,8 @@ const refereeSelect = {
   availableToDay: true,
   availableFromTime: true,
   availableToTime: true,
+  rating: true,
+  totalReviews: true,
 } satisfies Prisma.RefereeSelect;
 
 @Injectable()
@@ -172,56 +174,149 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private async applyWinnerRewards(
+  private static readonly PEER_RANK_POINTS: Record<number, number> = {
+    1: 10,
+    2: 5,
+    3: 0,
+  };
+  private static readonly REFEREE_RANK_POINTS: Record<number, number> = {
+    1: 15,
+    2: 10,
+    3: 5,
+    4: 0,
+  };
+  private static readonly WIN_POINTS = 50;
+
+  /** Mark match finished; points wait until peer + referee rankings are in. */
+  private async markMatchFinished(
     tx: Prisma.TransactionClient,
-    match: {
-      id: string;
-      rewardsApplied: boolean;
-      scoreJson?: string | null;
-      participants: {
-        userId: number;
-        team: number;
-        status: MatchInviteStatus;
-      }[];
-    },
-    winnerTeam: TeamIndex,
+    matchId: string,
+    winnerTeam: TeamIndex | null,
+    scoreJson?: string | null,
   ) {
-    if (match.rewardsApplied) return;
-    const winners = this.winningParticipants(match.participants, winnerTeam);
-    const score = parseScore(match.scoreJson);
-    score.winnerTeam = winnerTeam;
-    const claimed = await tx.match.updateMany({
-      where: { id: match.id, rewardsApplied: false },
+    const score = parseScore(scoreJson);
+    if (winnerTeam != null) score.winnerTeam = winnerTeam;
+    await tx.match.update({
+      where: { id: matchId },
       data: {
         winnerTeam,
         status: MatchStatus.COMPLETED,
-        rewardsApplied: true,
         scoreJson: JSON.stringify(score),
       },
     });
-    if (claimed.count === 0) return;
-    for (const p of winners) {
-      const user = await tx.user.findUnique({
-        where: { id: p.userId },
-        select: { points: true },
-      });
-      const points = Number(user?.points || 0) + 50;
-      await tx.user.update({
-        where: { id: p.userId },
-        data: {
-          points,
-          wins: { increment: 1 },
-          rank: rankFromPoints(points),
-        },
-      });
+  }
+
+  private acceptedPlayers(
+    participants: { userId: number; team: number; status: MatchInviteStatus }[],
+  ) {
+    return participants.filter((p) => p.status === MatchInviteStatus.ACCEPTED);
+  }
+
+  private async rankingReady(matchId: string) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        participants: true,
+        peerRankings: true,
+        refereeRankings: true,
+      },
+    });
+    if (!match || match.rewardsApplied) return null;
+    if (match.status !== MatchStatus.COMPLETED && match.winnerTeam == null) {
+      return null;
     }
+    const players = this.acceptedPlayers(match.participants);
+    if (players.length < 2) return null;
+
+    for (const p of players) {
+      const others = players.filter((x) => x.userId !== p.userId).length;
+      const given = match.peerRankings.filter((r) => r.raterId === p.userId)
+        .length;
+      if (given < others) return null;
+    }
+
+    const needsReferee =
+      Boolean(match.refereeId) &&
+      match.refereeInviteStatus === MatchInviteStatus.ACCEPTED;
+    if (needsReferee && match.refereeRankings.length < players.length) {
+      return null;
+    }
+    return match;
+  }
+
+  /**
+   * Final points = (winPoints + refereeRankPoints + peerRankPoints) * 0.5
+   * Win team: winPoints=50; lose team: 0.
+   */
+  private async tryApplyRankingRewards(matchId: string) {
+    const match = await this.rankingReady(matchId);
+    if (!match) return;
+
+    const players = this.acceptedPlayers(match.participants);
+    const winnerTeam =
+      match.winnerTeam === 0 || match.winnerTeam === 1
+        ? (match.winnerTeam as TeamIndex)
+        : null;
+
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.match.updateMany({
+        where: { id: matchId, rewardsApplied: false },
+        data: { rewardsApplied: true, status: MatchStatus.COMPLETED },
+      });
+      if (claimed.count === 0) return;
+
+      for (const p of players) {
+        const winPoints =
+          winnerTeam != null && Number(p.team) === winnerTeam
+            ? MatchesService.WIN_POINTS
+            : 0;
+        const peerPoints = match.peerRankings
+          .filter((r) => r.rankedUserId === p.userId)
+          .reduce(
+            (sum, r) =>
+              sum + (MatchesService.PEER_RANK_POINTS[r.rank] ?? 0),
+            0,
+          );
+        const refRank = match.refereeRankings.find(
+          (r) => r.rankedUserId === p.userId,
+        );
+        const refereePoints = refRank
+          ? MatchesService.REFEREE_RANK_POINTS[refRank.rank] ?? 0
+          : 0;
+        const awarded = Math.round(
+          (winPoints + refereePoints + peerPoints) * 0.5,
+        );
+
+        await tx.matchParticipant.updateMany({
+          where: { matchId, userId: p.userId },
+          data: { pointsAwarded: awarded },
+        });
+
+        const user = await tx.user.findUnique({
+          where: { id: p.userId },
+          select: { points: true },
+        });
+        const points = Number(user?.points || 0) + awarded;
+        await tx.user.update({
+          where: { id: p.userId },
+          data: {
+            points,
+            ...(winPoints > 0 ? { wins: { increment: 1 } } : {}),
+            rank: rankFromPoints(points),
+          },
+        });
+      }
+    });
   }
 
   async settleExpiredMatches() {
     const rows = await this.prisma.match.findMany({
       where: {
-        rewardsApplied: false,
         status: { not: MatchStatus.CANCELLED },
+        OR: [
+          { status: { not: MatchStatus.COMPLETED } },
+          { rewardsApplied: false },
+        ],
       },
       include: { participants: true },
       take: 80,
@@ -232,21 +327,26 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
       const expired = this.computedStatus(match) === 'COMPLETED';
       const winner = official ?? (expired ? winnerFromScore(score, true) : null);
       if (!official && !expired) continue;
-      await this.prisma.$transaction(async (tx) => {
-        const fresh = await tx.match.findUnique({
-          where: { id: match.id },
-          include: { participants: true },
+      if (match.status !== MatchStatus.COMPLETED || match.winnerTeam == null) {
+        await this.prisma.$transaction(async (tx) => {
+          const fresh = await tx.match.findUnique({ where: { id: match.id } });
+          if (!fresh || fresh.status === MatchStatus.CANCELLED) return;
+          if (winner == null) {
+            await tx.match.update({
+              where: { id: match.id },
+              data: { status: MatchStatus.COMPLETED },
+            });
+            return;
+          }
+          await this.markMatchFinished(
+            tx,
+            match.id,
+            winner,
+            fresh.scoreJson,
+          );
         });
-        if (!fresh || fresh.rewardsApplied) return;
-        if (winner == null) {
-          await tx.match.update({
-            where: { id: match.id },
-            data: { status: MatchStatus.COMPLETED, rewardsApplied: true },
-          });
-          return;
-        }
-        await this.applyWinnerRewards(tx, fresh, winner);
-      });
+      }
+      await this.tryApplyRankingRewards(match.id);
     }
   }
 
@@ -415,9 +515,76 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
       include: { match: { include: this.include } },
       orderBy: { createdAt: 'desc' },
     });
-    return watches
+    const matchEvents = watches
       .filter((w) => w.match.status !== MatchStatus.CANCELLED)
-      .map((w) => this.serialize(w.match));
+      .map((w) => ({ kind: 'match' as const, ...this.serialize(w.match) }));
+
+    // Standalone court bookings (owner or accepted joiner) always appear.
+    // Bookings linked to a Match are skipped — those use MatchWatch instead.
+    const bookings = await this.prisma.courtBooking.findMany({
+      where: {
+        status: { not: BookingStatus.CANCELLED },
+        match: { is: null },
+        OR: [{ userId }, { participants: { some: { userId } } }],
+      },
+      orderBy: [{ bookingDate: 'asc' }, { createdAt: 'desc' }],
+      include: {
+        timeSlot: true,
+        court: {
+          include: {
+            paddleOwner: {
+              select: {
+                id: true,
+                organizationName: true,
+                location: true,
+              },
+            },
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            profileImage: true,
+          },
+        },
+        participants: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                profileImage: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    const bookingEvents = bookings.map((b) => ({
+      kind: 'booking' as const,
+      id: b.id,
+      bookingDate: b.bookingDate,
+      startTime: b.timeSlot.startTime,
+      endTime: b.timeSlot.endTime,
+      title: `Court booking · ${b.court?.name || 'Court'}`,
+      status: b.status,
+      isPublic: b.isPublic,
+      availableSlots: b.availableSlots,
+      court: b.court,
+      user: b.user,
+      participants: b.participants,
+      role: b.userId === userId ? ('owner' as const) : ('participant' as const),
+    }));
+
+    return [...matchEvents, ...bookingEvents].sort((a, b) => {
+      const da = String(a.bookingDate).slice(0, 10);
+      const db = String(b.bookingDate).slice(0, 10);
+      if (da !== db) return da.localeCompare(db);
+      return String(a.startTime || '').localeCompare(String(b.startTime || ''));
+    });
   }
 
   async notifyDueReminders() {
@@ -580,7 +747,7 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
     const [withFlags] = await this.withWatchFlags(userId, [
       this.serialize(match),
     ]);
-    return withFlags;
+    return this.attachRankingFlags(withFlags, { userId });
   }
 
   async listLive() {
@@ -595,7 +762,7 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
       .filter((m) => m.lifecycle === 'LIVE');
   }
 
-  async listResults() {
+  async listResults(userId?: number) {
     await this.settleExpiredMatches();
     const rows = await this.prisma.match.findMany({
       where: { status: { not: MatchStatus.CANCELLED } },
@@ -603,9 +770,313 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
       include: this.include,
       take: 200,
     });
-    return rows
+    const completed = rows
       .map((m) => this.serialize(m))
       .filter((m) => m.lifecycle === 'COMPLETED');
+    if (userId == null) return completed;
+    return Promise.all(
+      completed.map((m) => this.attachRankingFlags(m, { userId })),
+    );
+  }
+
+  private async attachRankingFlags(
+    serialized: any,
+    viewer: { userId?: number; refereeId?: string },
+  ) {
+    const matchId = serialized.id;
+    const players = (serialized.participants || []).filter(
+      (p) => p.status === MatchInviteStatus.ACCEPTED,
+    );
+    const isCompleted =
+      serialized.lifecycle === 'COMPLETED' ||
+      serialized.status === MatchStatus.COMPLETED ||
+      serialized.winnerTeam != null;
+
+    let myPeerRanked = false;
+    let needsMyPeerRanking = false;
+    if (viewer.userId != null && isCompleted) {
+      const me = players.find((p) => p.userId === viewer.userId);
+      if (me) {
+        const others = players.filter((p) => p.userId !== viewer.userId).length;
+        const given = await this.prisma.matchPeerRanking.count({
+          where: { matchId, raterId: viewer.userId },
+        });
+        myPeerRanked = others === 0 || given >= others;
+        needsMyPeerRanking = others > 0 && given < others;
+      }
+    }
+
+    let refereeRanked = false;
+    let needsRefereeRanking = false;
+    const hasReferee =
+      Boolean(serialized.refereeId) &&
+      serialized.refereeInviteStatus === MatchInviteStatus.ACCEPTED;
+    if (hasReferee && isCompleted) {
+      const refCount = await this.prisma.matchRefereeRanking.count({
+        where: { matchId },
+      });
+      refereeRanked = refCount >= players.length && players.length > 0;
+      if (
+        viewer.refereeId &&
+        serialized.refereeId === viewer.refereeId
+      ) {
+        needsRefereeRanking = !refereeRanked;
+      }
+    }
+
+    let myRefereeReview: {
+      rating: number;
+      comment: string | null;
+      createdAt: Date;
+    } | null = null;
+    let needsMyRefereeReview = false;
+    if (viewer.userId != null && hasReferee && isCompleted) {
+      const me = players.find((p) => p.userId === viewer.userId);
+      if (me) {
+        myRefereeReview = await this.prisma.matchRefereeReview.findUnique({
+          where: {
+            matchId_userId: { matchId, userId: viewer.userId },
+          },
+          select: { rating: true, comment: true, createdAt: true },
+        });
+        // After peer rankings are done, players may review the referee.
+        needsMyRefereeReview =
+          myPeerRanked && !myRefereeReview && Boolean(serialized.refereeId);
+      }
+    }
+
+    return {
+      ...serialized,
+      myPeerRanked,
+      needsMyPeerRanking,
+      refereeRanked,
+      needsRefereeRanking,
+      myRefereeReview,
+      needsMyRefereeReview,
+      rankingsComplete: Boolean(serialized.rewardsApplied),
+      rankablePlayers: players.map((p) => ({
+        userId: p.userId,
+        pointsAwarded: p.pointsAwarded ?? null,
+        user: p.user,
+      })),
+    };
+  }
+
+  async getRankingContext(matchId: string, viewer: { userId?: number; refereeId?: string }) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: this.include,
+    });
+    if (!match) throw new NotFoundException('Match not found');
+    const base = this.serialize(match);
+    return this.attachRankingFlags(base, viewer);
+  }
+
+  async submitPeerRankings(
+    userId: number,
+    matchId: string,
+    rankings: { userId: number; rank: number }[],
+  ) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: { participants: true },
+    });
+    if (!match) throw new NotFoundException('Match not found');
+    const finished =
+      match.status === MatchStatus.COMPLETED || match.winnerTeam != null;
+    if (!finished) {
+      throw new BadRequestException('Rankings open only after the match ends');
+    }
+    const players = this.acceptedPlayers(match.participants);
+    const me = players.find((p) => p.userId === userId);
+    if (!me) {
+      throw new ForbiddenException('You are not a player in this match');
+    }
+    const others = players.filter((p) => p.userId !== userId);
+    if (rankings.length !== others.length) {
+      throw new BadRequestException(
+        `Rank all ${others.length} other players (1 = best)`,
+      );
+    }
+    const ranks = rankings.map((r) => Number(r.rank)).sort((a, b) => a - b);
+    const expected = others.map((_, i) => i + 1);
+    if (ranks.join(',') !== expected.join(',')) {
+      throw new BadRequestException(
+        `Use each rank from 1 to ${others.length} exactly once`,
+      );
+    }
+    const otherIds = new Set(others.map((p) => p.userId));
+    for (const row of rankings) {
+      if (!otherIds.has(Number(row.userId))) {
+        throw new BadRequestException('Can only rank other players in this match');
+      }
+      if (Number(row.userId) === userId) {
+        throw new BadRequestException('You cannot rank yourself');
+      }
+    }
+
+    const existing = await this.prisma.matchPeerRanking.count({
+      where: { matchId, raterId: userId },
+    });
+    if (existing > 0) {
+      throw new BadRequestException('You already submitted rankings for this match');
+    }
+
+    await this.prisma.matchPeerRanking.createMany({
+      data: rankings.map((r) => ({
+        matchId,
+        raterId: userId,
+        rankedUserId: Number(r.userId),
+        rank: Number(r.rank),
+      })),
+    });
+
+    await this.tryApplyRankingRewards(matchId);
+    return this.getRankingContext(matchId, { userId });
+  }
+
+  private async recalculateRefereeRating(refereeId: string) {
+    const agg = await this.prisma.matchRefereeReview.aggregate({
+      where: { refereeId },
+      _avg: { rating: true },
+      _count: { _all: true },
+    });
+    await this.prisma.referee.update({
+      where: { id: refereeId },
+      data: {
+        rating: agg._avg.rating ?? 0,
+        totalReviews: agg._count._all,
+      },
+    });
+  }
+
+  async submitRefereeReview(
+    userId: number,
+    matchId: string,
+    dto: { rating: number; comment?: string },
+  ) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: { participants: true, referee: true },
+    });
+    if (!match) throw new NotFoundException('Match not found');
+    const finished =
+      match.status === MatchStatus.COMPLETED || match.winnerTeam != null;
+    if (!finished) {
+      throw new BadRequestException(
+        'Referee reviews open only after the match ends',
+      );
+    }
+    if (
+      !match.refereeId ||
+      match.refereeInviteStatus !== MatchInviteStatus.ACCEPTED
+    ) {
+      throw new BadRequestException('This match has no accepted referee');
+    }
+    const players = this.acceptedPlayers(match.participants);
+    if (!players.some((p) => p.userId === userId)) {
+      throw new ForbiddenException('Only match players can review the referee');
+    }
+
+    const others = players.filter((p) => p.userId !== userId).length;
+    const peerGiven = await this.prisma.matchPeerRanking.count({
+      where: { matchId, raterId: userId },
+    });
+    if (others > 0 && peerGiven < others) {
+      throw new BadRequestException(
+        'Rank other players before reviewing the referee',
+      );
+    }
+
+    const existing = await this.prisma.matchRefereeReview.findUnique({
+      where: { matchId_userId: { matchId, userId } },
+    });
+    if (existing) {
+      throw new ConflictException('You have already reviewed this referee');
+    }
+
+    const comment = dto.comment?.trim() || undefined;
+    const review = await this.prisma.matchRefereeReview.create({
+      data: {
+        matchId,
+        refereeId: match.refereeId,
+        userId,
+        rating: dto.rating,
+        comment,
+      },
+    });
+    await this.recalculateRefereeRating(match.refereeId);
+    return {
+      ...review,
+      referee: match.referee
+        ? {
+            id: match.referee.id,
+            fullName: match.referee.fullName,
+            profileImage: match.referee.profileImage,
+          }
+        : null,
+    };
+  }
+
+  async submitRefereeRankings(
+    refereeId: string,
+    matchId: string,
+    rankings: { userId: number; rank: number }[],
+  ) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: { participants: true },
+    });
+    if (!match) throw new NotFoundException('Match not found');
+    if (match.refereeId !== refereeId) {
+      throw new ForbiddenException('Only the match referee can rank players');
+    }
+    if (match.refereeInviteStatus !== MatchInviteStatus.ACCEPTED) {
+      throw new ForbiddenException('Accept the match before ranking');
+    }
+    const finished =
+      match.status === MatchStatus.COMPLETED || match.winnerTeam != null;
+    if (!finished) {
+      throw new BadRequestException('Rankings open only after the match ends');
+    }
+    const players = this.acceptedPlayers(match.participants);
+    if (rankings.length !== players.length) {
+      throw new BadRequestException(
+        `Rank all ${players.length} players (1 = best)`,
+      );
+    }
+    const ranks = rankings.map((r) => Number(r.rank)).sort((a, b) => a - b);
+    const expected = players.map((_, i) => i + 1);
+    if (ranks.join(',') !== expected.join(',')) {
+      throw new BadRequestException(
+        `Use each rank from 1 to ${players.length} exactly once`,
+      );
+    }
+    const playerIds = new Set(players.map((p) => p.userId));
+    for (const row of rankings) {
+      if (!playerIds.has(Number(row.userId))) {
+        throw new BadRequestException('Can only rank players in this match');
+      }
+    }
+
+    const existing = await this.prisma.matchRefereeRanking.count({
+      where: { matchId },
+    });
+    if (existing > 0) {
+      throw new BadRequestException('Referee rankings already submitted');
+    }
+
+    await this.prisma.matchRefereeRanking.createMany({
+      data: rankings.map((r) => ({
+        matchId,
+        refereeId,
+        rankedUserId: Number(r.userId),
+        rank: Number(r.rank),
+      })),
+    });
+
+    await this.tryApplyRankingRewards(matchId);
+    return this.getRankingContext(matchId, { refereeId });
   }
 
   async findOneForReferee(refereeId: string, id: string) {
@@ -620,7 +1091,7 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
     if (match.refereeInviteStatus !== MatchInviteStatus.ACCEPTED) {
       throw new ForbiddenException('Accept the match before scoring');
     }
-    return this.serialize(match);
+    return this.attachRankingFlags(this.serialize(match), { refereeId });
   }
 
   async recordScore(
@@ -649,7 +1120,19 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('This match was cancelled');
     }
     const lifecycle = this.computedStatus(match);
-    if (lifecycle !== 'LIVE') {
+    const current = parseScore(match.scoreJson);
+    const endingEarly = dto.kind === 'END';
+
+    if (endingEarly) {
+      if (current.winnerTeam != null || match.winnerTeam != null) {
+        throw new BadRequestException('This match is already finished');
+      }
+      if (lifecycle !== 'LIVE' && lifecycle !== 'COMPLETED') {
+        throw new BadRequestException(
+          'Match can only be ended after it has started.',
+        );
+      }
+    } else if (lifecycle !== 'LIVE') {
       throw new BadRequestException(
         lifecycle === 'COMPLETED'
           ? 'Match time has ended. Scoring is closed.'
@@ -657,7 +1140,6 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    const current = parseScore(match.scoreJson);
     if (current.winnerTeam != null && dto.kind !== 'UNDO') {
       throw new BadRequestException('This match is already finished');
     }
@@ -667,6 +1149,17 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
     if (dto.kind === 'UNDO') {
       const prev = log.pop();
       next = prev || emptyScore();
+    } else if (dto.kind === 'END') {
+      // Finalize from current sets / games / points lead (same as slot expiry).
+      const winner = winnerFromScore(current, true);
+      if (winner == null) {
+        throw new BadRequestException(
+          'Score is completely tied. Award more points before ending the match.',
+        );
+      }
+      log.push(current);
+      if (log.length > 200) log.shift();
+      next = { ...current, sets: [...(current.sets || [])], winnerTeam: winner };
     } else {
       const team = (dto.team === 1 ? 1 : 0) as TeamIndex;
       if (dto.team !== 0 && dto.team !== 1) {
@@ -689,22 +1182,27 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
         },
       });
       if (finished && next.winnerTeam != null) {
-        const fresh = await tx.match.findUnique({
-          where: { id: matchId },
-          include: { participants: true },
-        });
-        if (fresh) {
-          await this.applyWinnerRewards(tx, fresh, next.winnerTeam);
-        }
+        await this.markMatchFinished(
+          tx,
+          matchId,
+          next.winnerTeam,
+          JSON.stringify(next),
+        );
       }
       return row;
     });
+
+    if (finished) {
+      await this.tryApplyRankingRewards(matchId);
+    }
 
     const fresh = await this.prisma.match.findUnique({
       where: { id: updated.id },
       include: this.include,
     });
-    return this.serialize(fresh!);
+    return this.attachRankingFlags(this.serialize(fresh!), {
+      refereeId,
+    });
   }
 
   async create(hostUserId: number, dto: CreateMatchDto) {
@@ -751,6 +1249,12 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('No open spots left for public join');
     }
 
+    const allocateByOrg = Boolean(dto.allocateRefereeByOrg) && !dto.refereeId;
+    if (dto.allocateRefereeByOrg && dto.refereeId) {
+      throw new BadRequestException(
+        'Choose either a referee or organization allocation, not both',
+      );
+    }
     if (dto.refereeId) {
       const refs = await this.listAvailableReferees(
         dto.courtId,
@@ -816,6 +1320,7 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
           refereeInviteStatus: dto.refereeId
             ? MatchInviteStatus.PENDING
             : undefined,
+          allocateRefereeByOrg: allocateByOrg,
           participants: {
             create: [
               {
@@ -841,7 +1346,9 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
           matchId: created.id,
           senderUserId: hostUserId,
           type: ChatMessageType.TEXT,
-          text: 'Match group created. Players and the referee join after they accept.',
+          text: allocateByOrg
+            ? 'Match group created. The club will allocate a referee.'
+            : 'Match group created. Players and the referee join after they accept.',
         },
       });
 
@@ -1145,9 +1652,119 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
       data: {
         refereeId,
         refereeInviteStatus: MatchInviteStatus.PENDING,
+        allocateRefereeByOrg: false,
       },
     });
     return this.findOneForUser(hostUserId, matchId);
+  }
+
+  async listForOwner(paddleOwnerId: number) {
+    await this.settleExpiredMatches();
+    const rows = await this.prisma.match.findMany({
+      where: {
+        court: { paddleOwnerId },
+        status: { not: MatchStatus.CANCELLED },
+      },
+      orderBy: [{ bookingDate: 'desc' }, { startTime: 'desc' }],
+      include: this.include,
+    });
+    return rows.map((m) => {
+      const serialized = this.serialize(m);
+      const needsReferee =
+        !m.refereeId ||
+        m.refereeInviteStatus === MatchInviteStatus.REJECTED ||
+        (m.allocateRefereeByOrg &&
+          m.refereeInviteStatus !== MatchInviteStatus.ACCEPTED);
+      return {
+        ...serialized,
+        needsReferee,
+      };
+    });
+  }
+
+  async allocateRefereeByOwner(
+    paddleOwnerId: number,
+    matchId: string,
+    refereeId: string,
+  ) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        court: { select: { id: true, name: true, paddleOwnerId: true } },
+      },
+    });
+    if (!match) throw new NotFoundException('Match not found');
+    if (match.court.paddleOwnerId !== paddleOwnerId) {
+      throw new ForbiddenException('This match is not on your courts');
+    }
+    if (match.status === MatchStatus.CANCELLED) {
+      throw new BadRequestException('This match was cancelled');
+    }
+    if (match.refereeInviteStatus === MatchInviteStatus.ACCEPTED) {
+      throw new BadRequestException('A referee is already assigned');
+    }
+
+    const referee = await this.prisma.referee.findFirst({
+      where: {
+        id: refereeId,
+        status: 'ACTIVE',
+        courts: { some: { courtId: match.courtId } },
+      },
+      select: { id: true, fullName: true },
+    });
+    if (!referee) {
+      throw new BadRequestException(
+        'Referee is not linked to this court or is inactive',
+      );
+    }
+
+    const available = await this.listAvailableReferees(
+      match.courtId,
+      this.dateKey(match.bookingDate),
+      match.startTime,
+    );
+    if (!available.some((r) => r.id === refereeId)) {
+      throw new BadRequestException(
+        'Referee is not available for this court and time',
+      );
+    }
+
+    await this.prisma.match.update({
+      where: { id: matchId },
+      data: {
+        refereeId,
+        refereeInviteStatus: MatchInviteStatus.ACCEPTED,
+        allocateRefereeByOrg: false,
+      },
+    });
+
+    const name = referee.fullName || 'The referee';
+    await this.prisma.notification.create({
+      data: {
+        receiverId: match.hostUserId,
+        senderId: 0,
+        type: 'Match Referee',
+        message: `${name} was allocated by the club for your match at ${match.court.name}.`,
+        meta: { action: 'OPEN_MATCH', matchId },
+      },
+    });
+    await this.prisma.matchChatMessage.create({
+      data: {
+        matchId,
+        senderRefereeId: refereeId,
+        type: ChatMessageType.TEXT,
+        text: `${name} was allocated by the club as referee.`,
+      },
+    });
+
+    const updated = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: this.include,
+    });
+    return {
+      ...this.serialize(updated!),
+      needsReferee: false,
+    };
   }
 
   async remove(hostUserId: number, matchId: string) {
@@ -1213,7 +1830,11 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
       orderBy: [{ bookingDate: 'asc' }, { startTime: 'asc' }],
       include: this.include,
     });
-    return rows.map((m) => this.serialize(m));
+    return Promise.all(
+      rows.map((m) =>
+        this.attachRankingFlags(this.serialize(m), { refereeId }),
+      ),
+    );
   }
 
   async refereeRespond(refereeId: string, matchId: string, accept: boolean) {
@@ -1350,6 +1971,32 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** Unique list/thread label: "Court D · Ali / Bilal vs Sara / Omar" */
+  private chatDisplayTitle(match: {
+    title?: string | null;
+    court?: { name?: string | null } | null;
+    participants?: {
+      team: number;
+      status: MatchInviteStatus;
+      user?: { fullName?: string | null } | null;
+    }[];
+  }): string {
+    const court = match.court?.name || match.title || 'Match';
+    const active = (match.participants || []).filter(
+      (p) => p.status === MatchInviteStatus.ACCEPTED,
+    );
+    const label = (team: number) =>
+      active
+        .filter((p) => (team === 1 ? p.team === 1 : p.team !== 1))
+        .map((p) => p.user?.fullName)
+        .filter(Boolean)
+        .join(' / ');
+    const a = label(0);
+    const b = label(1);
+    if (!a && !b) return match.title || court;
+    return `${court} · ${a || 'Team A'} vs ${b || 'Team B'}`;
+  }
+
   async listConversationsForUser(userId: number) {
     const rows = await this.prisma.match.findMany({
       where: {
@@ -1362,9 +2009,30 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
       include: {
         court: { select: { name: true } },
         messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+        participants: {
+          where: { status: MatchInviteStatus.ACCEPTED },
+          include: { user: { select: playerSelect } },
+          orderBy: [{ team: 'asc' }, { createdAt: 'asc' }],
+        },
       },
     });
-    return rows.map((m) => this.serialize(m));
+    return Promise.all(
+      rows.map(async (m) => {
+        const lastReadAt =
+          m.participants.find((p) => p.userId === userId)?.lastReadAt ?? null;
+        const unreadCount = await this.prisma.matchChatMessage.count({
+          where: {
+            matchId: m.id,
+            NOT: {
+              AND: [{ senderUserId: userId }, { senderRefereeId: null }],
+            },
+            ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {}),
+          },
+        });
+        const displayTitle = this.chatDisplayTitle(m);
+        return { ...this.serialize(m), unreadCount, displayTitle };
+      }),
+    );
   }
 
   async listConversationsForReferee(refereeId: string) {
@@ -1379,6 +2047,11 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
         court: { select: { name: true } },
         host: { select: playerSelect },
         messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+        participants: {
+          where: { status: MatchInviteStatus.ACCEPTED },
+          include: { user: { select: playerSelect } },
+          orderBy: [{ team: 'asc' }, { createdAt: 'asc' }],
+        },
       },
     });
     return Promise.all(
@@ -1392,7 +2065,8 @@ export class MatchesService implements OnModuleInit, OnModuleDestroy {
               : {}),
           },
         });
-        return { ...this.serialize(m), unreadCount };
+        const displayTitle = this.chatDisplayTitle(m);
+        return { ...this.serialize(m), unreadCount, displayTitle };
       }),
     );
   }

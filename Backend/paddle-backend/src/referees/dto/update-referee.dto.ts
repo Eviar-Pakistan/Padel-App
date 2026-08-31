@@ -9,6 +9,7 @@ import {
   Matches,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import {
   RefereeStatus,
@@ -63,8 +64,10 @@ export class UpdateRefereeDto {
   fullName?: string;
 
   @IsOptional()
+  @Transform(({ value }) => emptyToNull(value))
+  @ValidateIf((_, v) => v !== null && v !== undefined)
   @IsEmail()
-  email?: string;
+  email?: string | null;
 
   @IsOptional()
   @IsString()

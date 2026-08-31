@@ -55,6 +55,12 @@ export class CreateMatchDto {
   @IsString()
   refereeId?: string;
 
+  /** When true, padel org will allocate the referee (no refereeId). */
+  @IsOptional()
+  @Transform(({ value }) => toBoolean(value))
+  @IsBoolean()
+  allocateRefereeByOrg?: boolean;
+
   @IsOptional()
   @IsString()
   title?: string;

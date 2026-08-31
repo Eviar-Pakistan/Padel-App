@@ -202,7 +202,8 @@ export class NewsService {
   }
 
   async like(postId: string, userId: number) {
-    await this.requirePost(postId);
+    const post = await this.requirePost(postId);
+    let created = false;
     try {
       await this.prisma.$transaction([
         this.prisma.newsLike.create({ data: { postId, userId } }),
@@ -211,6 +212,7 @@ export class NewsService {
           data: { likeCount: { increment: 1 } },
         }),
       ]);
+      created = true;
     } catch (err) {
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -219,6 +221,18 @@ export class NewsService {
         return this.findOne(postId, { userId, role: Roles.USER });
       }
       throw err;
+    }
+    if (created) {
+      const actor = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { fullName: true },
+      });
+      await this.notifyPostAuthor({
+        post,
+        actorUserId: userId,
+        type: 'News Like',
+        message: `${actor?.fullName || 'Someone'} liked your post.`,
+      });
     }
     return this.findOne(postId, { userId, role: Roles.USER });
   }
@@ -341,7 +355,7 @@ export class NewsService {
   }
 
   async addComment(postId: string, userId: number, dto: CreateNewsCommentDto) {
-    await this.requirePost(postId);
+    const post = await this.requirePost(postId);
     if (dto.parentId) {
       const parent = await this.prisma.newsComment.findUnique({
         where: { id: dto.parentId },
@@ -369,6 +383,17 @@ export class NewsService {
         data: { commentCount: { increment: 1 } },
       });
       return created;
+    });
+
+    const preview =
+      comment.body.length > 80
+        ? `${comment.body.slice(0, 77)}...`
+        : comment.body;
+    await this.notifyPostAuthor({
+      post,
+      actorUserId: userId,
+      type: 'News Comment',
+      message: `${comment.user.fullName || 'Someone'} commented on your post: "${preview}"`,
     });
 
     return {
@@ -451,6 +476,37 @@ export class NewsService {
     const post = await this.prisma.newsPost.findUnique({ where: { id } });
     if (!post) throw new NotFoundException('Post not found');
     return post;
+  }
+
+  /** Notify the user author when someone likes or comments on their post. */
+  private async notifyPostAuthor(params: {
+    post: {
+      id: string;
+      authorType: NewsAuthorType;
+      userId: number | null;
+    };
+    actorUserId: number;
+    type: 'News Like' | 'News Comment';
+    message: string;
+  }) {
+    const { post, actorUserId, type, message } = params;
+    if (post.authorType !== NewsAuthorType.USER || post.userId == null) {
+      return;
+    }
+    if (post.userId === actorUserId) return;
+
+    await this.prisma.notification.create({
+      data: {
+        receiverId: post.userId,
+        senderId: actorUserId,
+        type,
+        message,
+        meta: {
+          action: 'OPEN_NEWS_POST',
+          postId: post.id,
+        },
+      },
+    });
   }
 
   private async requireAuthor(id: string, auth: AuthUser) {

@@ -5,7 +5,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { BookingStatus, JoinRequestStatus, Prisma } from '../../generated/prisma/client';
+import {
+  BookingStatus,
+  ChatMessageType,
+  JoinRequestStatus,
+  Prisma,
+} from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImageUploadService } from '../common/image-upload.service';
 import { CreateCourtDto } from './dto/create-court.dto';
@@ -545,6 +550,17 @@ export class CourtsService {
           where: { id: joinRequestId },
           data: { status: JoinRequestStatus.ACCEPTED },
         });
+
+        await this.ensureCourtBookingChatGroup(tx, {
+          bookingId: request.bookingId,
+          ownerUserId,
+          joinerUserId: request.requesterId,
+          joinerName: request.requester?.fullName || 'A player',
+          courtName: request.booking.court?.name || 'court',
+          paddleOwnerId: request.booking.court?.paddleOwnerId,
+          bookingDate: request.booking.bookingDate,
+          startTime: request.booking.timeSlot?.startTime || '',
+        });
       });
     } catch (err) {
       if (
@@ -602,6 +618,124 @@ export class CourtsService {
       where: { id: request.bookingId },
       include: this.bookingDetailInclude,
     });
+  }
+
+  /**
+   * On first accepted join: create a "Court Booking" chat group with owner + joiner.
+   * Later accepts: add the joiner to the existing group.
+   */
+  private async ensureCourtBookingChatGroup(
+    tx: Prisma.TransactionClient,
+    params: {
+      bookingId: string;
+      ownerUserId: number;
+      joinerUserId: number;
+      joinerName: string;
+      courtName: string;
+      paddleOwnerId?: number | null;
+      bookingDate: Date;
+      startTime: string;
+    },
+  ) {
+    const {
+      bookingId,
+      ownerUserId,
+      joinerUserId,
+      joinerName,
+      courtName,
+      paddleOwnerId,
+      bookingDate,
+      startTime,
+    } = params;
+    if (paddleOwnerId == null) {
+      return;
+    }
+
+    const booking = await tx.courtBooking.findUnique({
+      where: { id: bookingId },
+      select: { chatGroupId: true },
+    });
+    if (!booking) return;
+
+    if (booking.chatGroupId) {
+      await tx.chatGroupMember.upsert({
+        where: {
+          groupId_userId: {
+            groupId: booking.chatGroupId,
+            userId: joinerUserId,
+          },
+        },
+        create: { groupId: booking.chatGroupId, userId: joinerUserId },
+        update: {},
+      });
+      await tx.chatMessage.create({
+        data: {
+          groupId: booking.chatGroupId,
+          senderUserId: joinerUserId,
+          type: ChatMessageType.TEXT,
+          text: `${joinerName} joined the court booking.`,
+        },
+      });
+      await tx.chatGroup.update({
+        where: { id: booking.chatGroupId },
+        data: { updatedAt: new Date() },
+      });
+      return;
+    }
+
+    const dateStr = bookingDate.toISOString().slice(0, 10);
+    const description = [courtName, dateStr, startTime]
+      .filter(Boolean)
+      .join(' · ');
+    // Unique display name so bookings on the same court do not all say "Court Booking"
+    const groupName = description || 'Court Booking';
+
+    const group = await tx.chatGroup.create({
+      data: {
+        name: groupName,
+        description: description || undefined,
+        paddleOwnerId,
+        members: {
+          create: [
+            { userId: ownerUserId },
+            { userId: joinerUserId },
+          ],
+        },
+        messages: {
+          create: {
+            senderUserId: ownerUserId,
+            type: ChatMessageType.TEXT,
+            text: 'Court Booking chat started. Players who join this booking will be added here.',
+          },
+        },
+      },
+    });
+
+    const linked = await tx.courtBooking.updateMany({
+      where: { id: bookingId, chatGroupId: null },
+      data: { chatGroupId: group.id },
+    });
+
+    if (linked.count === 0) {
+      // Another accept created the group first — use that one and drop the orphan.
+      await tx.chatGroup.delete({ where: { id: group.id } });
+      const fresh = await tx.courtBooking.findUnique({
+        where: { id: bookingId },
+        select: { chatGroupId: true },
+      });
+      if (fresh?.chatGroupId) {
+        await tx.chatGroupMember.upsert({
+          where: {
+            groupId_userId: {
+              groupId: fresh.chatGroupId,
+              userId: joinerUserId,
+            },
+          },
+          create: { groupId: fresh.chatGroupId, userId: joinerUserId },
+          update: {},
+        });
+      }
+    }
   }
 
   /** @deprecated Prefer requestJoinBooking + acceptJoinRequest */

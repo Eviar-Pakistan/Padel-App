@@ -16,6 +16,7 @@ import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserGuard } from '../auth/user.guard';
 import { RefereeGuard } from '../auth/referee.guard';
+import { PaddleOwnerGuard } from '../auth/paddle-owner.guard';
 import { SendChatMessageDto } from '../chat/dto/send-chat-message.dto';
 import { MatchesService } from './matches.service';
 import { MatchLiveGateway } from './match-live.gateway';
@@ -23,6 +24,9 @@ import { CreateMatchDto } from './dto/create-match.dto';
 import { AssignRefereeDto } from './dto/assign-referee.dto';
 import { SwitchMatchTeamsDto } from './dto/switch-match-teams.dto';
 import { MatchScoreActionDto } from './dto/match-score-action.dto';
+import { SubmitPeerRankingsDto } from './dto/submit-peer-rankings.dto';
+import { SubmitRefereeRankingsDto } from './dto/submit-referee-rankings.dto';
+import { SubmitRefereeReviewDto } from './dto/submit-referee-review.dto';
 
 const chatFileUpload = FileInterceptor('file', {
   storage: memoryStorage(),
@@ -75,14 +79,34 @@ export class MatchesController {
 
   @UseGuards(JwtAuthGuard, UserGuard)
   @Get('results')
-  listResults() {
-    return this.matches.listResults();
+  listResults(@Req() req: { user: { userId: number } }) {
+    return this.matches.listResults(req.user.userId);
   }
 
   @UseGuards(JwtAuthGuard, UserGuard)
   @Get('history')
   listHistory(@Req() req: { user: { userId: number } }) {
     return this.matches.listHistoryForUser(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard, PaddleOwnerGuard)
+  @Get('owner')
+  listForOwner(@Req() req: { user: { userId: number } }) {
+    return this.matches.listForOwner(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard, PaddleOwnerGuard)
+  @Post('owner/:id/referee')
+  allocateRefereeByOwner(
+    @Param('id') id: string,
+    @Req() req: { user: { userId: number } },
+    @Body() dto: AssignRefereeDto,
+  ) {
+    return this.matches.allocateRefereeByOwner(
+      req.user.userId,
+      id,
+      dto.refereeId,
+    );
   }
 
   @UseGuards(JwtAuthGuard, UserGuard)
@@ -101,6 +125,39 @@ export class MatchesController {
     @Req() req: { user: { userId: number } },
   ) {
     return this.matches.findOneForUser(req.user.userId, id);
+  }
+
+  @UseGuards(JwtAuthGuard, UserGuard)
+  @Get(':id/rankings')
+  rankingContext(
+    @Param('id') id: string,
+    @Req() req: { user: { userId: number } },
+  ) {
+    return this.matches.getRankingContext(id, { userId: req.user.userId });
+  }
+
+  @UseGuards(JwtAuthGuard, UserGuard)
+  @Post(':id/rankings')
+  submitPeerRankings(
+    @Param('id') id: string,
+    @Req() req: { user: { userId: number } },
+    @Body() dto: SubmitPeerRankingsDto,
+  ) {
+    return this.matches.submitPeerRankings(
+      req.user.userId,
+      id,
+      dto.rankings,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, UserGuard)
+  @Post(':id/referee-review')
+  submitRefereeReview(
+    @Param('id') id: string,
+    @Req() req: { user: { userId: number } },
+    @Body() dto: SubmitRefereeReviewDto,
+  ) {
+    return this.matches.submitRefereeReview(req.user.userId, id, dto);
   }
 
   @UseGuards(JwtAuthGuard, UserGuard)
@@ -277,6 +334,29 @@ export class RefereeMatchesController {
     this.live.emitScore(id, match);
     if (match.score?.finished) this.live.emitFinished(id, match);
     return match;
+  }
+
+  @Get(':id/rankings')
+  rankingContext(
+    @Param('id') id: string,
+    @Req() req: { user: { userId: string } },
+  ) {
+    return this.matches.getRankingContext(id, {
+      refereeId: String(req.user.userId),
+    });
+  }
+
+  @Post(':id/rankings')
+  submitRankings(
+    @Param('id') id: string,
+    @Req() req: { user: { userId: string } },
+    @Body() dto: SubmitRefereeRankingsDto,
+  ) {
+    return this.matches.submitRefereeRankings(
+      String(req.user.userId),
+      id,
+      dto.rankings,
+    );
   }
 
   @Post(':id/accept')

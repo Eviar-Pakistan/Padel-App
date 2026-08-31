@@ -2,8 +2,8 @@ import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class MatchScoreActionDto {
-  @IsIn(['POINT', 'ACE', 'WINNER', 'ERROR', 'UNDO'])
-  kind!: 'POINT' | 'ACE' | 'WINNER' | 'ERROR' | 'UNDO';
+  @IsIn(['POINT', 'ACE', 'WINNER', 'ERROR', 'UNDO', 'END'])
+  kind!: 'POINT' | 'ACE' | 'WINNER' | 'ERROR' | 'UNDO' | 'END';
 
   @IsOptional()
   @Type(() => Number)

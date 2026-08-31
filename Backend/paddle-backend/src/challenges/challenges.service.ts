@@ -306,10 +306,24 @@ export class ChallengesService {
       },
     });
 
-    return conversations.map((c) => ({
-      ...c,
-      otherUser: c.userLowId === userId ? c.userHigh : c.userLow,
-    }));
+    return Promise.all(
+      conversations.map(async (c) => {
+        const lastReadAt =
+          c.userLowId === userId ? c.userLowLastReadAt : c.userHighLastReadAt;
+        const unreadCount = await this.prisma.userConversationMessage.count({
+          where: {
+            conversationId: c.id,
+            senderUserId: { not: userId },
+            ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {}),
+          },
+        });
+        return {
+          ...c,
+          otherUser: c.userLowId === userId ? c.userHigh : c.userLow,
+          unreadCount,
+        };
+      }),
+    );
   }
 
   async listMessages(userId: number, conversationId: string, after?: string) {

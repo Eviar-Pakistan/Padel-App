@@ -94,11 +94,14 @@ function wouldWinTieBreak(state: ScoreState, team: TeamIndex) {
   return t >= 7 && t - o >= 2;
 }
 
+/** True if this team is one point from winning the game (or tie-break). */
 function wouldWinGame(state: ScoreState, team: TeamIndex) {
   if (state.isTieBreak) return wouldWinTieBreak(state, team);
   const p = team === 0 ? state.pointA : state.pointB;
   const o = team === 0 ? state.pointB : state.pointA;
-  if (p >= 3 && o >= 3) return true;
+  // Advantage after deuce
+  if (p >= 3 && o >= 3) return p === o + 1;
+  // 40 with opponent below 40
   return p >= 3 && o < 3;
 }
 
@@ -109,6 +112,11 @@ function wouldWinSetFromGame(state: ScoreState, team: TeamIndex) {
   return (g >= 6 && g - o >= 2) || (g === 7 && o === 5);
 }
 
+/**
+ * Tennis/padel game points with deuce + advantage:
+ * 0 → 15 → 30 → 40; at 40–40 (deuce) next point is Ad;
+ * Ad + point = game; Ad against = back to deuce.
+ */
 export function applyPoint(input: ScoreState, team: TeamIndex): ScoreState {
   const state = clone(input);
   if (state.winnerTeam != null) return state;
@@ -128,12 +136,32 @@ export function applyPoint(input: ScoreState, team: TeamIndex): ScoreState {
 
   const pKey = team === 0 ? 'pointA' : 'pointB';
   const oKey = team === 0 ? 'pointB' : 'pointA';
-  if (
-    (state[pKey] >= 3 && state[oKey] >= 3) ||
-    (state[pKey] >= 3 && state[oKey] < 3)
-  ) {
+  const p = state[pKey];
+  const o = state[oKey];
+
+  // Already at 40 (or more) with opponent below 40 → game
+  if (p >= 3 && o < 3) {
     return winGame(state, team);
   }
+
+  // Deuce / advantage territory (both at least 40)
+  if (p >= 3 && o >= 3) {
+    if (p > o) {
+      // Scoring team already has Ad → win the game
+      return winGame(state, team);
+    }
+    if (o > p) {
+      // Opponent had Ad → back to deuce
+      state.pointA = 3;
+      state.pointB = 3;
+      return state;
+    }
+    // Deuce → scoring team gets Advantage
+    state[pKey] += 1;
+    return state;
+  }
+
+  // 0 / 15 / 30 → next point
   state[pKey] += 1;
   return state;
 }
@@ -205,6 +233,21 @@ export function pointLabel(value: number) {
   return POINT_LABEL[Math.min(Math.max(value, 0), 3)] || '0';
 }
 
+/** Display labels for both teams (Deuce / Ad aware). */
+export function pointsLabels(state: ScoreState): [string, string] {
+  if (state.isTieBreak) {
+    return [String(state.tieA), String(state.tieB)];
+  }
+  const a = state.pointA;
+  const b = state.pointB;
+  if (a >= 3 && b >= 3) {
+    if (a === b) return ['Deuce', 'Deuce'];
+    if (a > b) return ['Ad', '40'];
+    return ['40', 'Ad'];
+  }
+  return [pointLabel(a), pointLabel(b)];
+}
+
 export function formatSets(sets: SetScore[]) {
   if (!sets.length) return '';
   return sets.map((s) => `${s.a}-${s.b}`).join(', ');
@@ -224,6 +267,14 @@ export function eventBanner(
 ): string | null {
   if (state.winnerTeam != null) {
     return `Match over • ${teamNames[state.winnerTeam]}`;
+  }
+  if (
+    !state.isTieBreak &&
+    state.pointA >= 3 &&
+    state.pointB >= 3 &&
+    state.pointA === state.pointB
+  ) {
+    return 'Deuce';
   }
   const check = (team: TeamIndex) => {
     const names = teamNames[team];
@@ -246,6 +297,15 @@ export function eventBanner(
         ? wouldWinTieBreak(state, team)
         : wouldWinSetFromGame(state, team);
       if (setWin) return `Set Point • ${names}`;
+      if (
+        !state.isTieBreak &&
+        state.pointA >= 3 &&
+        state.pointB >= 3 &&
+        (team === 0 ? state.pointA : state.pointB) >
+          (team === 0 ? state.pointB : state.pointA)
+      ) {
+        return `Advantage • ${names}`;
+      }
       if (team !== state.servingTeam) return `Break Point • ${names}`;
       return `Game Point • ${names}`;
     }
@@ -258,10 +318,11 @@ export function publicScoreView(
   state: ScoreState,
   teamNames: [string, string] = ['Team A', 'Team B'],
 ) {
+  const [pointsLabelA, pointsLabelB] = pointsLabels(state);
   return {
     ...state,
-    pointsLabelA: state.isTieBreak ? String(state.tieA) : pointLabel(state.pointA),
-    pointsLabelB: state.isTieBreak ? String(state.tieB) : pointLabel(state.pointB),
+    pointsLabelA,
+    pointsLabelB,
     setsLabel: formatMatchScore(state),
     event: eventBanner(state, teamNames),
     finished: state.winnerTeam != null,
