@@ -84,6 +84,35 @@ const emptyForm = {
   category: "NEWS",
 };
 
+/** Works on HTTPS and many HTTP contexts (clipboard API often blocked on HTTP). */
+async function copyText(text) {
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.top = "0";
+  ta.style.left = "0";
+  ta.style.width = "1px";
+  ta.style.height = "1px";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  document.body.removeChild(ta);
+  return ok;
+}
+
 export default function NewsFeed() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -100,12 +129,20 @@ export default function NewsFeed() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
   const [feedMode, setFeedMode] = useState("all"); // all | mine
   const [showComposer, setShowComposer] = useState(false);
   const [editingPost, setEditingPost] = useState(null);
   const [commentsPostId, setCommentsPostId] = useState(null);
   const searchInputRef = useRef(null);
   const focusHandledRef = useRef("");
+  const toastTimerRef = useRef(null);
+
+  const showToast = (message) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast(message);
+    toastTimerRef.current = setTimeout(() => setToast(""), 2500);
+  };
 
   const loadFilters = async () => {
     try {
@@ -236,20 +273,49 @@ export default function NewsFeed() {
 
   const handleShare = async (post) => {
     const url = `${window.location.origin}/news?post=${post.id}`;
-    try {
-      if (navigator.share) {
+    let sharedOrCopied = false;
+
+    // Prefer native share sheet when available (mobile).
+    if (typeof navigator.share === "function") {
+      try {
         await navigator.share({
-          title: post.authorName,
-          text: post.description,
+          title: post.authorName || "Padel post",
+          text: post.description || "Check out this padel post",
           url,
         });
-      } else {
-        await navigator.clipboard.writeText(url);
+        sharedOrCopied = true;
+      } catch (err) {
+        // User cancelled native share — still try copy so they get the link.
+        if (err?.name === "AbortError") {
+          /* cancelled */
+        }
       }
+    }
+
+    if (!sharedOrCopied) {
+      try {
+        const ok = await copyText(url);
+        if (ok) {
+          sharedOrCopied = true;
+          showToast("Link copied");
+        } else {
+          // Last resort: prompt so user can copy manually on locked-down browsers.
+          window.prompt("Copy this link:", url);
+          sharedOrCopied = true;
+        }
+      } catch {
+        window.prompt("Copy this link:", url);
+        sharedOrCopied = true;
+      }
+    }
+
+    if (!sharedOrCopied) return;
+
+    try {
       const { data } = await shareNewsPost(post.id);
       patchPost(data);
     } catch {
-      /* user cancelled share */
+      /* count update optional */
     }
   };
 
@@ -624,6 +690,12 @@ export default function NewsFeed() {
 
         {error && (
           <p className="px-4 pt-3 text-sm text-red-400">{error}</p>
+        )}
+
+        {toast && (
+          <div className="pointer-events-none fixed bottom-24 left-1/2 z-[80] w-[min(92vw,24rem)] -translate-x-1/2 rounded-full bg-[var(--color-primary)] px-4 py-2.5 text-center text-sm font-semibold text-[var(--color-background)] shadow-lg">
+            {toast}
+          </div>
         )}
 
         {loading ? (

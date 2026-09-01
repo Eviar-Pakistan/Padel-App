@@ -167,7 +167,7 @@ export default function InitiateMatch() {
   const submit = async () => {
     setError("");
     if (!allocateByOrg && !refereeId) {
-      setError("Select a referee, or let the organization allocate one.");
+      setError("Select a referee, or let the court allocate one.");
       return;
     }
     setSaving(true);
